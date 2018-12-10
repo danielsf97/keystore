@@ -15,7 +15,6 @@ public class KeystoreProtocol {
                 .build();
     }
 
-
     public static class PutReq {
         Map<Long,byte[]> values;
         public PutReq(Map<Long,byte[]> values) {

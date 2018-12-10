@@ -5,23 +5,47 @@ import io.atomix.cluster.messaging.impl.NettyMessagingService;
 import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Serializer;
 
-import java.security.Key;
-import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class Server {
-    public static void main(String[] args) throws Exception {
 
-        Keystore bs = new KeystoreSrv();
-        Map<Integer, Transaction> currentTransactions;
+    private static final Address[] addresses = new Address[] {
+            Address.from("localhost", 12345),
+            Address.from("localhost", 12346),
+            Address.from("localhost", 12347)
+    };
 
-        Serializer s = KeystoreProtocol.newSerializer();
-        ManagedMessagingService ms = NettyMessagingService.builder().withAddress(Address.from(12345)).build();
 
-        ms.registerHandler("put", (c,m)-> {
+
+    private final Address myAddress = Address.from("localhost:12350");
+    private static ManagedMessagingService ms;
+    private static Serializer s;
+    private ExecutorService es;
+    private Log log;
+
+    private HashMap<Integer, Transaction> currentTransactions;
+
+    public Server() {
+
+        this.ms =  NettyMessagingService.builder()
+                .withAddress(myAddress)
+                .build();
+
+        this.s = KeystoreProtocol
+                .newSerializer();
+
+        this.es = Executors.newSingleThreadExecutor();
+
+        this.currentTransactions = new HashMap<>();
+
+        this.ms.registerHandler("put", (c,m)-> {
             KeystoreProtocol.PutReq r = s.decode(m);
 
+            Map<Long,byte[]> values = r.values;
             CompletableFuture<byte[]> cf = new CompletableFuture<>();
             try {
                 CompletableFuture<Boolean> ok = bs.put(r.values);
@@ -32,7 +56,7 @@ public class Server {
             return cf;
         });
 
-        ms.registerHandler("get", (c,m)-> {
+        this.ms.registerHandler("get", (c, m)-> {
             KeystoreProtocol.GetReq r = s.decode(m);
 
             CompletableFuture<byte[]> cf = new CompletableFuture<>();
@@ -44,6 +68,14 @@ public class Server {
             }
             return cf;
         });
+
+    }
+
+
+
+
+    public static void main(String[] args) throws Exception {
+        Server server = new Server();
 
         ms.start().get();
     }

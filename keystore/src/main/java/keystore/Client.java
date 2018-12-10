@@ -33,14 +33,9 @@ public class Client {
 
         //Por um Login e Register???
 
-
-
         Keystore ks = new KeystoreCli(10000 + id);
 
-
         CompletableFuture<Map<Long,byte[]>> oi = ks.get(new HashSet<>());
-
-
 
 
     }
