@@ -4,6 +4,7 @@ import io.atomix.utils.serializer.Serializer;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 public class KeystoreProtocol {
     public static Serializer newSerializer() {
@@ -22,8 +23,8 @@ public class KeystoreProtocol {
         }
     }
     public static class PutRep {
-        boolean state;
-        public PutRep(boolean state) {
+        CompletableFuture<Boolean> state;
+        public PutRep(CompletableFuture<Boolean> state) {
             this.state = state;
         }
     }
@@ -35,8 +36,8 @@ public class KeystoreProtocol {
         }
     }
     public static class GetRep {
-        Map<Long, byte[]> values;
-        public GetRep(Map<Long, byte[]> values) {
+        CompletableFuture<Map<Long, byte[]>> values;
+        public GetRep(CompletableFuture<Map<Long, byte[]>> values) {
             this.values = values;
         }
     }
