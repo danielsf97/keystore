@@ -29,12 +29,7 @@ public class KeystoreSrv implements Keystore {
     private static Serializer s;
     private ExecutorService es;
     private Log log;
-
-    int id;
-
-    public KeystoreSrv() {
-
-    }
+    private int id;
 
     public KeystoreSrv(int id){
 
@@ -52,8 +47,8 @@ public class KeystoreSrv implements Keystore {
         this.log = new Log();
 
         data = new HashMap<>();
+        //TODO: aqui ir buscar a informação ao Log
     }
-
 
     @Override
     public CompletableFuture<Boolean> put(Map<Long, byte[]> values) throws Exception {
@@ -65,32 +60,9 @@ public class KeystoreSrv implements Keystore {
         return CompletableFuture.completedFuture(new HashMap<>());
     }
 
-
-/*        ms.registerHandler("put", (c,m)-> {
-        KeystoreProtocol.PutReq r = s.decode(m);
-
-        CompletableFuture<byte[]> cf = new CompletableFuture<>();
-        try {
-            CompletableFuture<Boolean> ok = bs.put(r.values);
-            cf.complete(s.encode(new KeystoreProtocol.PutRep(ok)));
-        } catch (Exception e) {
-            cf.completeExceptionally(e);
-        }
-        return cf;
-    });
-
-        ms.registerHandler("get", (c,m)-> {
-        KeystoreProtocol.GetReq r = s.decode(m);
-
-        CompletableFuture<byte[]> cf = new CompletableFuture<>();
-        try {
-            CompletableFuture<Map<Long,byte[]>> ok = bs.get(r.keys);
-            cf.complete(s.encode(new KeystoreProtocol.GetRep(ok)));
-        } catch (Exception e) {
-            cf.completeExceptionally(e);
-        }
-        return cf;
-    });*/
-
+    public static void main(String[] args) {
+        int id = Integer.parseInt(args[0]);
+        KeystoreSrv worker = new KeystoreSrv(id);
+    }
 
 }

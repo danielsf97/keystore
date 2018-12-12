@@ -26,15 +26,20 @@ public class KeystoreCli implements Keystore {
     public CompletableFuture<Boolean> put(Map<Long, byte[]> values) throws Exception {
         KeystoreProtocol.PutReq req = new KeystoreProtocol.PutReq(values);
         CompletableFuture<byte[]> r = ms.sendAndReceive(srv, "put", s.encode(req));
-        KeystoreProtocol.PutRep rep = s.decode(r.get());
-        return rep.state;
+
+        return r.thenApply((msg) -> {
+            KeystoreProtocol.PutResp rep = s.decode(msg);
+            return rep.state;
+        });
     }
 
     @Override
     public CompletableFuture<Map<Long, byte[]>> get(Collection<Long> keys) throws Exception {
         KeystoreProtocol.GetReq req = new KeystoreProtocol.GetReq(keys);
         CompletableFuture<byte[]> r = ms.sendAndReceive(srv, "get", s.encode(req));
-        KeystoreProtocol.GetRep rep = s.decode(r.get());
-        return rep.values;
+        return r.thenApply((msg) -> {
+            KeystoreProtocol.GetResp resp = s.decode(msg);
+            return resp.values;
+        });
     }
 }

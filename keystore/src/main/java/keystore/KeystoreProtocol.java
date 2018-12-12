@@ -10,8 +10,10 @@ public class KeystoreProtocol {
     public static Serializer newSerializer() {
         return Serializer.builder()
                 .withTypes(
-                        KeystoreProtocol.PutReq.class, KeystoreProtocol.PutRep.class,
-                        KeystoreProtocol.GetReq.class, KeystoreProtocol.GetRep.class)
+                        KeystoreProtocol.PutReq.class,
+                        KeystoreProtocol.PutResp.class,
+                        KeystoreProtocol.GetReq.class,
+                        KeystoreProtocol.GetResp.class)
                 .build();
     }
 
@@ -21,9 +23,10 @@ public class KeystoreProtocol {
             this.values = values;
         }
     }
-    public static class PutRep {
-        CompletableFuture<Boolean> state;
-        public PutRep(CompletableFuture<Boolean> state) {
+
+    public static class PutResp {
+        boolean state;
+        public PutResp(boolean state) {
             this.state = state;
         }
     }
@@ -34,12 +37,12 @@ public class KeystoreProtocol {
             this.keys = keys;
         }
     }
-    public static class GetRep {
-        CompletableFuture<Map<Long, byte[]>> values;
-        public GetRep(CompletableFuture<Map<Long, byte[]>> values) {
+
+    public static class GetResp {
+        Map<Long, byte[]> values;
+        public GetResp(Map<Long, byte[]> values) {
             this.values = values;
         }
     }
-
 
 }
