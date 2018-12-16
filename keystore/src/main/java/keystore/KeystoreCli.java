@@ -4,7 +4,6 @@ import io.atomix.cluster.messaging.ManagedMessagingService;
 import io.atomix.cluster.messaging.impl.NettyMessagingService;
 import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Serializer;
-import spullara.nio.channels.FutureServerSocketChannel;
 
 import java.util.Collection;
 import java.util.Map;
@@ -25,6 +24,7 @@ public class KeystoreCli implements Keystore {
     @Override
     public CompletableFuture<Boolean> put(Map<Long, byte[]> values) throws Exception {
         KeystoreProtocol.PutReq req = new KeystoreProtocol.PutReq(values);
+        System.out.println("HHEELLLO FROM KEYSTORECLI");
         CompletableFuture<byte[]> r = ms.sendAndReceive(srv, "put", s.encode(req));
 
         return r.thenApply((msg) -> {

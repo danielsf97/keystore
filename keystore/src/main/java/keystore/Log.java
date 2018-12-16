@@ -14,14 +14,14 @@ public class Log {
     }
 
     public static class LogEntry<T> {
-        private int xid;
-        private T data;
+        private int trans_id;
+        private T action;
         private Phase phase;
 
-        public LogEntry(int xid, T data) {
-            this.xid=xid;
+        public LogEntry(int trans_id, T action) {
+            this.trans_id=trans_id;
             this.phase = Phase.STARTED;
-            this.data = data; //os participantes no coord e chaves nos participantes
+            this.action = action; //os participantes no coord e chaves nos participantes
 
         }
 
@@ -49,12 +49,25 @@ public class Log {
 
     public void write(int transId, Phase phase) {
         w = j.writer();
-        w.append(new Log.LogEntry(trans_id, interveniente, action));
+//        w.append(new Log.LogEntry(transId, interveniente, action));
         w.flush();
         //w.close();
 
     }
 
+    public boolean actionAlreadyExists(int trans_id, Phase ac) {
+        boolean exists = false;
+        SegmentedJournalReader<Object> r = j.openReader(0);
+        String action = ac.toString();
+        System.out.println("Verificar existência de ação: " + trans_id + " -> " + action);
+        while(r.hasNext() && !exists) {
+            Log.LogEntry e = (Log.LogEntry) r.next().entry();
+            System.out.println(e.trans_id + " -> " + e.action);
+            if(e.trans_id == trans_id && action.equals(e.action)) exists = true;
+        }
+        System.out.println("Returned " + exists);
+        return exists;
+    }
 
 //    public static void main(String[] args) {
 //        Serializer s = Serializer.builder()

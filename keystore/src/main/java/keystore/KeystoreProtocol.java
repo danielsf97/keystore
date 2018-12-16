@@ -4,7 +4,6 @@ import io.atomix.utils.serializer.Serializer;
 
 import java.util.Collection;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 public class KeystoreProtocol {
     public static Serializer newSerializer() {
@@ -16,6 +15,7 @@ public class KeystoreProtocol {
                         KeystoreProtocol.GetResp.class)
                 .build();
     }
+
 
     public static class PutReq {
         Map<Long,byte[]> values;
