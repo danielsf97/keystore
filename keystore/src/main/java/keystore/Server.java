@@ -147,15 +147,21 @@ public class Server {
 
 
     private void processTPC2(byte[] m){
-        TwoPCProtocol.ControllerPreparedResp rp = sp.decode(m);
+        System.out.println("A acabar");
+        TwoPCProtocol.ControllerCommitResp rp = sp.decode(m);
         Transaction e = currentTransactions.get(rp.txId);
+        System.out.println(rp.resp.toString());
         if (rp.resp == TwoPCProtocol.Status.COMMITED){
+            System.out.println("A acabar 2");
             e.setParticipant_resp(rp.pId, rp.resp);
-            if (e.check_prepared()){
+            if (e.check_commit()){
+                System.out.println("A acabar 3");
                 e.setPhase(Transaction.Phase.COMMITED);
                 KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp(true);
+                System.out.println("Done");
                 currentFutures.get(rp.txId).complete(s.encode(p));
                 currentFutures.remove(rp.txId);
+                System.out.println("Done2");
 
             };
         }

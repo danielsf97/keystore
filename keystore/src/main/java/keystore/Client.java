@@ -10,12 +10,12 @@ public class Client {
 
         Keystore ks = new KeystoreCli(12350);
 
-        Map<Long,byte[]> chaves = new HashMap<Long, byte[]>();
+        Map<Long,byte[]> chaves = new HashMap<>();
         chaves.put(1000000L, "Chave 1".getBytes());
-        chaves.put(1000001L, "Chave 2".getBytes());
-        chaves.put(1000002L, "Chave 3".getBytes());
+     //   chaves.put(1000001L, "Chave 2".getBytes());
+     //   chaves.put(1000002L, "Chave 3".getBytes());
         chaves.put(1000003L, "Chave 4".getBytes());
-        chaves.put(1000004L, "Chave 5".getBytes());
+     //   chaves.put(1000004L, "Chave 5".getBytes());
 
         ks.put(chaves).thenAccept((b) -> {
             if(b){

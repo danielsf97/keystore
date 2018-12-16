@@ -12,7 +12,8 @@ public class TwoPCProtocol {
                         TwoPCProtocol.ControllerPreparedReq.class,
                         TwoPCProtocol.ControllerPreparedResp.class,
                         TwoPCProtocol.ControllerCommitReq.class,
-                        TwoPCProtocol.ControllerCommitResp.class)
+                        TwoPCProtocol.ControllerCommitResp.class,
+                        TwoPCProtocol.Status.class)
                 .build();
     }
 
@@ -30,6 +31,7 @@ public class TwoPCProtocol {
             this.values = values;
         }
     }
+
 
     public static class ControllerPreparedResp{
         public int txId;

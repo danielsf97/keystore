@@ -55,6 +55,9 @@ public class Transaction {
         if (phase == Phase.STARTED){
             participants_status.put(participant, resp);
         }
+        else if (phase == Phase.PREPARED){
+            participants_status.put(participant,resp);
+        }
     }
 
     public int getId(){
@@ -77,11 +80,13 @@ public class Transaction {
 
     public boolean check_commit(){
         boolean prepared_commit = true;
-
+        System.out.println(participants_status.size());
         for (TwoPCProtocol.Status s: participants_status.values()){
+            System.out.println(s.toString());
             if (s != TwoPCProtocol.Status.COMMITED)
                 prepared_commit = false;
         }
+        System.out.println(prepared_commit);
 
         return prepared_commit;
     }
