@@ -39,7 +39,14 @@ public class KeystoreSrv implements Keystore {
         this.ms = NettyMessagingService.builder()
                 .withAddress(addresses[myId])
                 .build();
+        this.s  = TwoPCProtocol
+                .newSerializer();
 
+        this.es = Executors.newSingleThreadExecutor();
+
+        this.log = new Log();
+
+        data = new HashMap<>();
 
         //Recebe um pedido de prepared
         this.ms.registerHandler(TwoPCProtocol.ControllerPreparedReq.class.getName(), (o, m) ->{
@@ -71,14 +78,7 @@ public class KeystoreSrv implements Keystore {
             }
         },es);
 
-        this.s = KeystoreProtocol
-                .newSerializer();
 
-        this.es = Executors.newSingleThreadExecutor();
-
-        this.log = new Log();
-
-        data = new HashMap<>();
         //TODO: aqui ir buscar a informação ao Log
 
         ms.start();
