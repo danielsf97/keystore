@@ -9,43 +9,41 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class KeystoreSrv  {
 
 
-    private static final Address[] addresses = {
+    private static final Address[] addresses = new Address[]{
             Address.from("localhost:12345"),
             Address.from("localhost:12346"),
             Address.from("localhost:12347")
     };
 
     private Scanner sc = new Scanner(System.in);
-    Map<Long, byte[]> data;
+    private Map<Long, byte[]> data;
     private static ManagedMessagingService ms;
     private static Serializer s;
-    private ExecutorService es;
     private Log log;
     private int myId;
 
-    Map<Integer,Map<Long, byte[]>> pendent_puts;
+    private Map<Integer,Map<Long, byte[]>> pendent_puts;
 
-    Map<Integer,Collection<Long>> pendent_gets;
+    private Map<Integer,Collection<Long>> pendent_gets;
 
-    public KeystoreSrv(int id){
+    private KeystoreSrv(int id){
 
 
         this.myId = id;
 
-        this.ms = NettyMessagingService.builder()
+        ms = NettyMessagingService.builder()
                 .withAddress(addresses[myId])
                 .build();
-        this.s  = TwoPCProtocol
+        s  = TwoPCProtocol
                 .newSerializer();
 
-        this.es = Executors.newSingleThreadExecutor();
+        ExecutorService es = Executors.newSingleThreadExecutor();
 
         this.log = new Log();
 
@@ -55,25 +53,37 @@ public class KeystoreSrv  {
         data = new HashMap<>();
 
         //Recebe um pedido de prepared
-        this.ms.registerHandler(TwoPCProtocol.ControllerPreparedReq.class.getName(), (o, m) ->{
-            putTwoPC1(o,m);
-        },es);
+        ms.registerHandler(TwoPCProtocol.PutControllerPreparedReq.class.getName(), this::putTwoPC1, es);
 
-        this.ms.registerHandler(TwoPCProtocol.ControllerCommitReq.class.getName(), (o,m) ->{
-           putTwoPC2(o,m);
-        },es);
+        ms.registerHandler(TwoPCProtocol.PutControllerCommitReq.class.getName(), this::putTwoPC2, es);
 
+        ms.registerHandler(TwoPCProtocol.GetControllerReq.class.getName(), this::get, es);
 
         //TODO: aqui ir buscar a informação ao Log
 
         ms.start();
     }
 
-
-    public void putTwoPC1(Address address, byte[] m){
+    private void get(Address address, byte[] m) {
         System.out.println("PUT in keystore");
-        TwoPCProtocol.ControllerPreparedReq prepReq = s.decode(m);
+        TwoPCProtocol.GetControllerReq prepReq = s.decode(m);
         int trans_id = prepReq.txId;
+        Collection<Long> keys = prepReq.keys;
+        Map<Long,byte[]> rp = new HashMap<>();
+        for(Long e : keys){
+            if (data.containsKey(e))
+                rp.put(e,data.get(e));
+        }
+        TwoPCProtocol.GetControllerResp resp = new TwoPCProtocol.GetControllerResp(prepReq.txId,prepReq.pId,rp);
+        ms.sendAsync(address,TwoPCProtocol.GetControllerResp.class.getName(),s.encode(resp));
+    }
+
+
+    private void putTwoPC1(Address address, byte[] m){
+        System.out.println("PUT in keystore");
+        TwoPCProtocol.PutControllerPreparedReq prepReq = s.decode(m);
+        int trans_id = prepReq.txId;
+     //   if(!log.actionAlreadyExists(trans_id, Log.Phase.PREPARED) && !log.actionAlreadyExists(trans_id, Log.Phase.ROLLBACKED)) {
         if(!log.actionAlreadyExists(trans_id, Log.Phase.PREPARED) && !log.actionAlreadyExists(trans_id, Log.Phase.ROLLBACKED)) {
             System.out.print("You prepared for transaction " + trans_id + "?");
             String line = sc.nextLine();
@@ -92,8 +102,8 @@ public class KeystoreSrv  {
         }
     }
 
-    public void putTwoPC2(Address address, byte[] m) {
-        TwoPCProtocol.ControllerCommitReq commitReq = s.decode(m);
+    private void putTwoPC2(Address address, byte[] m) {
+        TwoPCProtocol.PutControllerCommitReq commitReq = s.decode(m);
         int trans_id = commitReq.txId;
         if(!log.actionAlreadyExists(trans_id, Log.Phase.COMMITED)) {
             for (Map.Entry<Long,byte[]> e : pendent_puts.get(trans_id).entrySet())

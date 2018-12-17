@@ -27,10 +27,10 @@ public class KeystoreCli implements Keystore {
         System.out.println("HHEELLLO FROM KEYSTORECLI");
         CompletableFuture<byte[]> r = ms.sendAndReceive(srv, "put", s.encode(req));
 
-        return r.thenCompose((msg) -> {
+        return r.thenApply((msg) -> {
             System.out.println("Hellooooo");
             KeystoreProtocol.PutResp rep = s.decode(msg);
-            return CompletableFuture.completedFuture(rep.state);
+            return rep.state;
         });
     }
 

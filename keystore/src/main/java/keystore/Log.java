@@ -7,7 +7,7 @@ import io.atomix.utils.serializer.Serializer;
 
 import java.util.List;
 
-public class Log {
+public class Log<T> {
 
     public enum Phase {
         STARTED, PREPARED, COMMITED, ROLLBACKED
@@ -16,18 +16,16 @@ public class Log {
     public static class LogEntry<T> {
         private int trans_id;
         private T action;
-        private Phase phase;
 
         public LogEntry(int trans_id, T action) {
             this.trans_id=trans_id;
-            this.phase = Phase.STARTED;
             this.action = action; //os participantes no coord e chaves nos participantes
 
         }
 
-        public void setPhase(Phase phase){
+/*       public void setPhase(Phase phase){
             this.phase = phase;
-        }
+        }*/
 
     }
 
@@ -44,14 +42,15 @@ public class Log {
                 .withName("log_coordenador")
                 .withSerializer(s)
                 .build();
+
         this.w = j.writer();
     }
 
-    public void write(int transId, Phase phase) {
+    public void write(int transId, T action) {
         w = j.writer();
-//        w.append(new Log.LogEntry(transId, interveniente, action));
+        w.append(new Log.LogEntry(transId, action));
         w.flush();
-        //w.close();
+        w.close();
 
     }
 
