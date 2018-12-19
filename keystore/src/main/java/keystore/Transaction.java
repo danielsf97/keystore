@@ -28,13 +28,6 @@ public class Transaction {
 
     }
 
-    public Transaction(Integer id, Collection <Integer> participants){
-        this.id = id;
-        this.participants = participants;
-        this.phase = Phase.STARTED;
-        this.participants_status = new HashMap<>();
-    }
-
 
     public void setPhase(Phase phase){
         this.phase = phase;
@@ -66,6 +59,10 @@ public class Transaction {
 
     public Collection<Integer> getParticipants() {
         return participants;
+    }
+
+    public TwoPCProtocol.Status getParticipantStatus(int pId){
+        return participants_status.get(pId);
     }
 
     public boolean check_prepared() {

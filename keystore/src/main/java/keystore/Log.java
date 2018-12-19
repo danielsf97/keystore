@@ -26,6 +26,17 @@ public class Log<T> {
 /*       public void setPhase(Phase phase){
             this.phase = phase;
         }*/
+        public String toString() {
+            return "xid="+trans_id+" "+action;
+        }
+
+        public int getTrans_id(){
+            return trans_id;
+        }
+
+        public T getAction(){
+            return action;
+        }
 
     }
 
@@ -33,26 +44,44 @@ public class Log<T> {
     private SegmentedJournal<Object> j;
     private SegmentedJournalWriter<Object> w;
 
-    public Log() {
+    public Log(String name) {
         this.s = Serializer.builder()
                 .withTypes(Log.LogEntry.class)
                 .build();
 
         this.j = SegmentedJournal.builder()
-                .withName("log_coordenador")
+                .withName(name)
                 .withSerializer(s)
                 .build();
 
         this.w = j.writer();
+
+
     }
 
     public void write(int transId, T action) {
         w = j.writer();
         w.append(new Log.LogEntry(transId, action));
         w.flush();
-        w.close();
+      //  w.close();
 
     }
+    public void read(){
+        SegmentedJournalReader<Object> r = j.openReader(0);
+        while(r.hasNext()) {
+            Log.LogEntry e = (Log.LogEntry) r.next().entry();
+            System.out.println(e.toString());
+        }
+    }
+
+    public Log.LogEntry read(int index){
+        SegmentedJournalReader<Object> r = j.openReader(index);
+        if (r.hasNext()) return (Log.LogEntry) r.next().entry();
+        return null;
+    }
+
+
+
 
     public boolean actionAlreadyExists(int trans_id, Phase ac) {
         boolean exists = false;
@@ -67,6 +96,8 @@ public class Log<T> {
         System.out.println("Returned " + exists);
         return exists;
     }
+
+
 
 //    public static void main(String[] args) {
 //        Serializer s = Serializer.builder()

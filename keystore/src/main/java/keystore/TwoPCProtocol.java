@@ -15,7 +15,9 @@ public class TwoPCProtocol {
                         PutControllerCommitReq.class,
                         TwoPCProtocol.ControllerCommitResp.class,
                         TwoPCProtocol.Status.class,
-                        GetControllerReq.class
+                        GetControllerReq.class,
+                        TwoPCProtocol.Abort.class,
+                        PutControllerReq.class
                         )
                 .build();
     }
@@ -24,19 +26,37 @@ public class TwoPCProtocol {
         PREPARED_REQ, PREPARED_OK, COMMITED, ABORT
     }
 
-    public static class PutControllerPreparedReq{
+
+    public static class Abort{
         public int txId;
-        public int pId;
-        public Map<Long, byte[]> values;
-        public PutControllerPreparedReq(int txId, int pId, Map<Long, byte[]> values){
+        public Abort(int txId){
             this.txId = txId;
-            this.pId = pId;
-            this.values = values;
         }
     }
 
 
+    public static class PutControllerReq{
+        public int txId;
+        public int pId;
+        public PutControllerReq(int txId, int pId){
+            this.txId = txId;
+            this.pId = pId;
+        }
+    }
 
+    public static class PutControllerPreparedReq extends PutControllerReq{
+        public Map<Long, byte[]> values;
+        public PutControllerPreparedReq(int txId, int pId, Map<Long, byte[]> values){
+            super(txId,pId);
+            this.values = values;
+        }
+    }
+
+    public static class PutControllerCommitReq extends PutControllerReq{
+        public PutControllerCommitReq(int txId, int pId){
+            super(txId,pId);
+        }
+    }
     public static class ControllerPreparedResp{
         public int txId;
         public int pId;
@@ -48,14 +68,7 @@ public class TwoPCProtocol {
         }
     }
 
-    public static class PutControllerCommitReq {
-        public int txId;
-        public int pId;
-        public PutControllerCommitReq(int txId, int pId){
-            this.txId = txId;
-            this.pId = pId;
-        }
-    }
+
 
     public static class ControllerCommitResp{
         public int txId;
@@ -73,7 +86,7 @@ public class TwoPCProtocol {
         public int txId;
         public int pId;
         public Collection<Long> keys;
-        public GetControllerReq(int txId, int pId, Collection<Long> values){
+        public GetControllerReq(int txId, int pId, Collection<Long> keys){
             this.txId = txId;
             this.pId = pId;
             this.keys = keys;

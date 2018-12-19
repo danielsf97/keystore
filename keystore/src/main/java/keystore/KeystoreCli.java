@@ -7,7 +7,7 @@ import io.atomix.utils.serializer.Serializer;
 
 import java.util.Collection;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.*;
 
 public class KeystoreCli implements Keystore {
     private final ManagedMessagingService ms;
@@ -23,15 +23,37 @@ public class KeystoreCli implements Keystore {
 
     @Override
     public CompletableFuture<Boolean> put(Map<Long, byte[]> values) throws Exception {
+        ExecutorService es = Executors.newSingleThreadExecutor();
+
         KeystoreProtocol.PutReq req = new KeystoreProtocol.PutReq(values);
         System.out.println("HHEELLLO FROM KEYSTORECLI");
         CompletableFuture<byte[]> r = ms.sendAndReceive(srv, "put", s.encode(req));
 
-        return r.thenApply((msg) -> {
+        System.out.println(r.isDone());
+
+
+        try {
+            byte[] oi = r.get(60000, TimeUnit.MILLISECONDS);
+
+            //return CompletableFuture.completedFuture( s.decode(r.get(60000, TimeUnit.MILLISECONDS)));
+            System.out.println("OO" + r.isDone());
+
+        }
+        catch(Exception e) {
+            System.out.println(r.isDone());
+        }
+
+        return CompletableFuture.completedFuture(false);
+
+
+        //      System.out.println("OOOO");
+
+
+       /* return r.thenApply((msg) -> {
             System.out.println("Hellooooo");
             KeystoreProtocol.PutResp rep = s.decode(msg);
             return rep.state;
-        });
+        });*/
     }
 
     @Override
