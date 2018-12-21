@@ -15,4 +15,8 @@ public class SimpleTransaction {
         this.clientAddress = clientAddress.port();
         this.participantsToKeys = participantsToKeys;
     }
+
+
+
+
 }

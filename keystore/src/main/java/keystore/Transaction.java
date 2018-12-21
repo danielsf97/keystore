@@ -13,9 +13,12 @@ class Transaction {
     private Integer id;
     private Collection<Integer> participants;
     private Map<Integer,Phase> participants_status;
+    private Map<Long,byte[]> keys;
     private Phase phase;
     private Integer client_txId;
     private Address address;
+
+
 
 
     Transaction(Integer id, Integer client_txId,Address address){
@@ -25,6 +28,7 @@ class Transaction {
         this.phase = Phase.STARTED;
         this.address = address;
         this.participants_status = new HashMap<>();
+        keys = new HashMap<>();
 
     }
 
@@ -90,40 +94,6 @@ class Transaction {
         return participants_status.get(pId);
     }
 
- /*   boolean check_prepared() {
-        boolean prepared_status = true;
-
-
-        for (Phase s : participants_status.values()){
-            if (s != Phase.PREPARED)
-                prepared_status = false;
-        }
-        return prepared_status;
-    }
-
-    boolean check_commit(){
-        boolean prepared_commit = true;
-
-        for (Phase s: participants_status.values()){
-            System.out.println(s.toString());
-            if (s != Phase.COMMITED)
-                prepared_commit = false;
-        }
-
-        return prepared_commit;
-    }
-
-    boolean check_abort(){
-        boolean prepared_commit = true;
-
-        for (Phase s: participants_status.values()){
-            System.out.println(s.toString());
-            if (s != Phase.ROLLBACKED )
-                prepared_commit = false;
-        }
-
-        return prepared_commit;
-    }*/
 
     boolean check_phase(Phase phase){
         boolean status = true;
@@ -136,6 +106,15 @@ class Transaction {
         return status;
     }
 
+
+    public void setKeys(Map<Long,byte[]> chaves){
+        System.out.println("A colocar chaves");
+        keys.putAll(chaves);
+    }
+
+    public Map<Long,byte[]> getKeys (){
+        return keys;
+    }
 
 
 }

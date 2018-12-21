@@ -15,6 +15,7 @@ public class TwoPCProtocol {
                         ControllerCommitReq.class,
                         ControllerCommitedResp.class,
                         GetControllerReq.class,
+                        GetControllerResp.class,
                         TwoPCProtocol.ControllerAbortReq.class,
                         ControllerReq.class,
                         TwoPCProtocol.ControllerReq.class,
@@ -23,10 +24,7 @@ public class TwoPCProtocol {
                         )
                 .build();
     }
-
-
-
-
+    
 
     public static class ControllerReq{
         public int txId;

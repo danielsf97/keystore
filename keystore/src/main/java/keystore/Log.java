@@ -46,8 +46,6 @@ public class Log<T> {
         this.s = Serializer.builder()
                 .withTypes(Log.LogEntry.class)
                 .withTypes(SimpleTransaction.class)
-                .withTypes(Address.class)
-                .withTypes(Inet4Address.class)
                 .build();
 
         this.j = SegmentedJournal.builder()

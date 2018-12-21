@@ -35,16 +35,20 @@ public class KeystoreProtocol {
     }
 
     public static class GetReq {
+        int txId;
         Collection<Long> keys;
-        public GetReq(Collection<Long> keys) {
+        public GetReq(Collection<Long> keys, int txId) {
             this.keys = keys;
+            this.txId = txId;
         }
     }
 
     public static class GetResp {
+        int txId;
         Map<Long, byte[]> values;
-        public GetResp(Map<Long, byte[]> values) {
+        public GetResp(Map<Long, byte[]> values, int txId) {
             this.values = values;
+            this.txId = txId;
         }
     }
 

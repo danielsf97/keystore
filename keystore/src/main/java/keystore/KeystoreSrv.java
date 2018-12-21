@@ -113,11 +113,11 @@ public class KeystoreSrv  {
             ms.sendAsync(address, TwoPCProtocol.ControllerAbortResp.class.getName(),s.encode(p));
             System.out.println("Transaction " + trans_id + " rollbacked from prepared!!");
         }
-        else { //ainda nao recebeu nada
+        else {
             log.write(trans_id, Phase.ROLLBACKED.toString());
             TwoPCProtocol.ControllerAbortResp p = new TwoPCProtocol.ControllerAbortResp(trans_id,myId);
             ms.sendAsync(address, TwoPCProtocol.ControllerAbortResp.class.getName(),s.encode(p));
-            System.out.println("Transaction " + trans_id + " rollbacked from nothing!!");
+            System.out.println("Transaction " + trans_id + " rollbacked from commit!!");
         }
     }
 
