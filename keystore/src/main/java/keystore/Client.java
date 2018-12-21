@@ -16,10 +16,10 @@ public class Client {
 
         Map<Long,byte[]> chaves = new HashMap<>();
         chaves.put(1000000L, "Chave 1".getBytes());
-  //      chaves.put(1000001L, "Chave 2".getBytes());
+    //    chaves.put(1000001L, "Chave 2".getBytes());
      //   chaves.put(1000002L, "Chave 3".getBytes());
         chaves.put(1000003L, "Chave 4".getBytes());
-     //   chaves.put(1000004L, "Chave 5".getBytes());
+    //    chaves.put(1000004L, "Chave 5".getBytes());
 
         ks.put(chaves).thenAccept((b) -> {
             if(b){
@@ -28,6 +28,14 @@ public class Client {
                 System.out.println("Chaves não Adicionadas");
             }
         });
+
+      /*  ks.put(chaves).thenAccept((b) -> {
+            if(b){
+                System.out.println("Chaves Adicionadas");
+            }else{
+                System.out.println("Chaves não Adicionadas");
+            }
+        });*/
 
 
 /*        ks.get(new ArrayList<Long>(){{

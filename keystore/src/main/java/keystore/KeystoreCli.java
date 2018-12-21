@@ -6,6 +6,7 @@ import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Serializer;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.*;
 
@@ -13,51 +14,48 @@ public class KeystoreCli implements Keystore {
     private final ManagedMessagingService ms;
     private final Address srv;
     private final Serializer s;
-
-    public KeystoreCli(int port ) throws Exception {
+    private final Map<Integer,CompletableFuture<Boolean>> put_requests;
+    private  int i;
+    private final ExecutorService es;
+    KeystoreCli(int port) throws Exception {
+        i = 0;
+           es = Executors.newSingleThreadExecutor();
         srv = Address.from("localhost", port);
         ms = NettyMessagingService.builder().withAddress(Address.from(10000)).build();
         s = KeystoreProtocol.newSerializer();
+        put_requests = new HashMap<>();
+
+        ms.registerHandler(KeystoreProtocol.PutResp.class.getName(),(o,m)->{
+            KeystoreProtocol.PutResp ooo = s.decode(m);
+            System.out.println("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO");
+            put_requests.remove(ooo.txId).complete(ooo.state);
+        },es);
+
         ms.start().get();
     }
 
     @Override
-    public CompletableFuture<Boolean> put(Map<Long, byte[]> values) throws Exception {
-        ExecutorService es = Executors.newSingleThreadExecutor();
+    public CompletableFuture<Boolean> put(Map<Long, byte[]> values) {
 
-        KeystoreProtocol.PutReq req = new KeystoreProtocol.PutReq(values);
+        KeystoreProtocol.PutReq req = new KeystoreProtocol.PutReq(values,i);
+
         System.out.println("HHEELLLO FROM KEYSTORECLI");
-        CompletableFuture<byte[]> r = ms.sendAndReceive(srv, "put", s.encode(req));
 
-        System.out.println(r.isDone());
+        ms.sendAsync(srv,"put",s.encode(req));
 
+        CompletableFuture<Boolean> cp = new CompletableFuture<>();
 
-        try {
-            byte[] oi = r.get(60000, TimeUnit.MILLISECONDS);
+        put_requests.put(i,cp);
 
-            //return CompletableFuture.completedFuture( s.decode(r.get(60000, TimeUnit.MILLISECONDS)));
-            System.out.println("OO" + r.isDone());
-
-        }
-        catch(Exception e) {
-            System.out.println(r.isDone());
-        }
-
-        return CompletableFuture.completedFuture(false);
+        System.out.println("OOOOO");
+        i++;
+        return cp;
 
 
-        //      System.out.println("OOOO");
-
-
-       /* return r.thenApply((msg) -> {
-            System.out.println("Hellooooo");
-            KeystoreProtocol.PutResp rep = s.decode(msg);
-            return rep.state;
-        });*/
     }
 
     @Override
-    public CompletableFuture<Map<Long, byte[]>> get(Collection<Long> keys) throws Exception {
+    public CompletableFuture<Map<Long, byte[]>> get(Collection<Long> keys) {
         KeystoreProtocol.GetReq req = new KeystoreProtocol.GetReq(keys);
         CompletableFuture<byte[]> r = ms.sendAndReceive(srv, "get", s.encode(req));
         return r.thenApply((msg) -> {

@@ -18,16 +18,19 @@ public class KeystoreProtocol {
 
 
     public static class PutReq {
+        int txId;
         Map<Long,byte[]> values;
-        public PutReq(Map<Long,byte[]> values) {
+        public PutReq(Map<Long,byte[]> values, int txId) {
             this.values = values;
+            this.txId = txId;
         }
     }
 
     public static class PutResp {
+        int txId;
         boolean state;
-        public PutResp(boolean state) {
-            this.state = state;
+        public PutResp(boolean state, int txId) {
+            this.state = state;this.txId=txId;
         }
     }
 

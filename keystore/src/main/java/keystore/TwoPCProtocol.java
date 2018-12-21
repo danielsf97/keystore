@@ -10,76 +10,80 @@ public class TwoPCProtocol {
     public static Serializer newSerializer() {
         return Serializer.builder()
                 .withTypes(
-                        TwoPCProtocol.PutControllerPreparedReq.class,
                         TwoPCProtocol.ControllerPreparedResp.class,
-                        PutControllerCommitReq.class,
-                        TwoPCProtocol.ControllerCommitResp.class,
-                        TwoPCProtocol.Status.class,
+                        TwoPCProtocol.ControllerPreparedReq.class,
+                        ControllerCommitReq.class,
+                        ControllerCommitedResp.class,
                         GetControllerReq.class,
-                        TwoPCProtocol.Abort.class,
-                        PutControllerReq.class
+                        TwoPCProtocol.ControllerAbortReq.class,
+                        ControllerReq.class,
+                        TwoPCProtocol.ControllerReq.class,
+                        TwoPCProtocol.ControllerAbortReq.class,
+                        TwoPCProtocol.ControllerAbortResp.class
                         )
                 .build();
     }
 
-    public enum Status {
-        PREPARED_REQ, PREPARED_OK, COMMITED, ABORT
-    }
 
 
-    public static class Abort{
-        public int txId;
-        public Abort(int txId){
-            this.txId = txId;
-        }
-    }
 
 
-    public static class PutControllerReq{
+    public static class ControllerReq{
         public int txId;
         public int pId;
-        public PutControllerReq(int txId, int pId){
+        public ControllerReq(int txId, int pId){
             this.txId = txId;
             this.pId = pId;
         }
     }
 
-    public static class PutControllerPreparedReq extends PutControllerReq{
-        public Map<Long, byte[]> values;
-        public PutControllerPreparedReq(int txId, int pId, Map<Long, byte[]> values){
+    public static class ControllerPreparedReq extends ControllerReq{
+        public Map<Long,byte[]> values;
+        public ControllerPreparedReq(int txId, int pId, Map<Long,byte[]> values){
             super(txId,pId);
             this.values = values;
         }
     }
 
-    public static class PutControllerCommitReq extends PutControllerReq{
-        public PutControllerCommitReq(int txId, int pId){
+    public static class ControllerCommitReq extends ControllerReq{
+        public ControllerCommitReq(int txId, int pId){
             super(txId,pId);
         }
     }
-    public static class ControllerPreparedResp{
+
+    public static class ControllerAbortReq extends ControllerReq{
+        public ControllerAbortReq(int txId, int pId){
+            super(txId,pId);
+        }
+    }
+
+    public static class ControllerResp{
         public int txId;
         public int pId;
-        public Status resp;
-        public ControllerPreparedResp(int txId, int pId, Status resp){
+        public ControllerResp(int txId, int pId){
             this.txId = txId;
             this.pId = pId;
-            this.resp = resp;
+        }
+    }
+    public static class ControllerPreparedResp extends ControllerResp{
+        public ControllerPreparedResp(int txId, int pId){
+            super(txId,pId);
         }
     }
 
 
-
-    public static class ControllerCommitResp{
-        public int txId;
-        public int pId;
-        public Status resp;
-        public ControllerCommitResp(int txId, int pId, Status resp){
-            this.txId = txId;
-            this.pId = pId;
-            this.resp = resp;
+    public static class ControllerCommitedResp extends ControllerResp{
+        public ControllerCommitedResp(int txId, int pId){
+            super(txId,pId);
         }
     }
+
+    public static class ControllerAbortResp extends ControllerResp{
+        public ControllerAbortResp(int txId, int pId){
+            super(txId,pId);
+        }
+    }
+
 
 
     public static class GetControllerReq {

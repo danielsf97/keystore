@@ -21,13 +21,14 @@ public class Server {
     private static ManagedMessagingService ms;
     private static Serializer s ;
     private static Serializer sp ;
-    private Log log;
+    private Log<Object> log;
 
     private HashMap<Integer, Transaction> currentTransactions;
-    private HashMap<Integer, CompletableFuture<byte[]>> currentFutures;
-    private HashMap<Integer, HashMap<Integer, CompletableFuture<Void>>> currentFutures2;
+    private HashMap<Integer, HashMap<Integer, CompletableFuture<Void>>> currentFuturesP1;
+    private HashMap<Integer, HashMap<Integer, CompletableFuture<Void>>> currentFuturesP2;
+    private HashMap<Integer, HashMap<Integer, CompletableFuture<Void>>> currentFuturesA;
 
-    private static AtomicInteger nextTxId = new AtomicInteger(0);
+    private static AtomicInteger nextTxId;
 
 
     private Server() {
@@ -44,29 +45,36 @@ public class Server {
                 .withAddress(myAddress)
                 .build();
 
-        this.log = new Log("Server");
+        this.log = new Log<>("Server");
 
-        this.currentFutures = new HashMap<>();
+
+
         this.currentTransactions = new HashMap<>();
-        this.currentFutures2 = new HashMap<>();
+        this.currentFuturesP1 = new HashMap<>();
+        this.currentFuturesP2 = new HashMap<>();
+        this.currentFuturesA = new HashMap<>();
+        this.nextTxId =  new AtomicInteger(0);
+
+        System.out.println("Size: " + currentTransactions.size());
 
         ms.registerHandler("put", (c, m) -> {
-                    System.out.println("HELLOOOOOO FROM SERVER");
-                    KeystoreProtocol.PutReq req = s.decode(m);
-                    CompletableFuture<byte[]> cf = new CompletableFuture<>();
+            System.out.println("HELLOOOOOO FROM SERVER");
+            KeystoreProtocol.PutReq req = s.decode(m);
 
-                    //AQUI O CENAS NÂO ESTÀ A 0 NO INICIO
-                    int txId = nextTxId.incrementAndGet();
-                    currentFutures.put(txId, cf);
-                    Transaction trans = new Transaction(txId);
-                    currentTransactions.put(txId, trans);
+            //AQUI O CENAS NÂO ESTÀ A 0 NO INICIO
+            int txId = nextTxId.incrementAndGet();
+            Transaction trans = new Transaction(txId,req.txId,c);
+            currentTransactions.put(txId, trans);
 
-                    processPutReq(trans, req);
+            processPutReq(trans, req);
 
-                    //  this.log.read();
 
-                    return cf;
-        });
+            //  this.log.read();
+
+
+          //  return cf;
+
+        },es);
 
         ms.registerHandler("get", (c,m) -> {
             CompletableFuture<byte []> cf = new CompletableFuture<>();
@@ -75,8 +83,7 @@ public class Server {
 
             //AQUI O CENAS NÂO ESTÀ A 0 NO INICIO
             int txId = nextTxId.incrementAndGet();
-            currentFutures.put(txId, cf);
-            Transaction trans = new Transaction(txId);
+            Transaction trans = new Transaction(txId,2, Address.from("localhost", 12346));
             currentTransactions.put(txId, trans);
 
             processGetReq(trans,req);
@@ -86,10 +93,10 @@ public class Server {
 
         ms.registerHandler(TwoPCProtocol.ControllerPreparedResp.class.getName(), (o,m) -> {
             System.out.println("Response from keystoresrv");
-            processTPC1(o,m);
+            processTPC1(m);
         }, es);
 
-        ms.registerHandler(TwoPCProtocol.ControllerCommitResp.class.getName(), (o,m) -> {
+        ms.registerHandler(TwoPCProtocol.ControllerCommitedResp.class.getName(), (o, m) -> {
             processTPC2(m);
         }, es);
 
@@ -97,49 +104,102 @@ public class Server {
             processGetResp(m);
         },es);
 
-        ms.registerHandler(TwoPCProtocol.Abort.class.getName(), this::abort, es);
+        ms.registerHandler(TwoPCProtocol.ControllerAbortReq.class.getName(),(o,m)->{
+            processAbort2(m);
+        }, es);
+
+        ms.registerHandler(TwoPCProtocol.ControllerAbortResp.class.getName(),(o,m)->{
+            processAbort(m);
+        }, es);
 
         // this.coordinator = new Coordinator(this.ms, this.es, addresses);
 
         ms.start();
+        restore();
+
+    }
+
+
+
+
+    private void restore() {
+        HashMap<Integer,SimpleTransaction> keys = new HashMap<>();
+        HashMap<Integer,String> phases = new HashMap<>();
+        boolean not_null = true;
+        int i = 0;
+        while(not_null){
+            Log.LogEntry e = log.read(i);
+            if (e==null) not_null = false;
+            else {
+                System.out.println(e.toString());
+                Object o = e.getAction();
+                System.out.println("NOME: " + o.getClass().getName());
+                if (o instanceof SimpleTransaction) {
+                    keys.put(e.getTrans_id(), (SimpleTransaction) o);
+                }
+                else {
+                    phases.put(e.getTrans_id(), (String) o );
+                }
+            }
+            i++;
+        }
+        for(Map.Entry<Integer,String> entry : phases.entrySet()){
+            if (entry.getValue().equals(Phase.STARTED.toString())){
+                nextTxId.incrementAndGet();
+                SimpleTransaction tx = keys.get(entry.getKey());
+                Transaction trans = new Transaction(tx, Phase.STARTED);
+                currentTransactions.put(trans.getId(), trans);
+                initPutTPC1(trans.getId(),tx.participantsToKeys);
+
+            }
+            else if (entry.getValue().equals(Phase.PREPARED.toString())){
+                SimpleTransaction tx = keys.get(entry.getKey());
+                nextTxId.incrementAndGet();
+                Transaction trans = new Transaction(tx, Phase.PREPARED);
+                currentTransactions.put(trans.getId(), trans);
+                initTPC2(trans);
+            }
+            else if (entry.getValue().equals(Phase.ABORT.toString())){
+                SimpleTransaction tx = keys.get(entry.getKey());
+                nextTxId.incrementAndGet();
+                Transaction trans = new Transaction(tx, Phase.PREPARED);
+                currentTransactions.put(trans.getId(), trans);
+                initAbort(trans.getId());
+            }
+            else{
+                nextTxId.incrementAndGet();
+            }
+        }
+
+        System.out.println("IIIIIIIIIIIIIIIIIII: " + nextTxId.get());
     }
 
     /////////////////////////ABORT///////////////////////////
-    private void abort(Address address, byte[] bytes) {
-        TwoPCProtocol.Abort abort = sp.decode(bytes);
-        abort_complete(abort.txId);
+
+
+
+
+    private void processAbort2(byte[] m) {
+        TwoPCProtocol.ControllerAbortReq rp = sp.decode(m);
+        Transaction e = currentTransactions.get(rp.txId);
+        e.setParticipant_resp(rp.pId, Phase.ROLLBACKED);
+        initAbort(e.getId());
+
     }
 
-    private synchronized void abort_complete(int txId){
-        Transaction e = currentTransactions.get(txId);
 
-        if (e.getPhase()!= Transaction.Phase.ROLLBACKED){
-            e.setPhase(Transaction.Phase.ROLLBACKED);
 
-            TwoPCProtocol.Abort abortt = new TwoPCProtocol.Abort(txId);
-            System.out.println("ABOOOOOOOOOOORRRTTTTTTTTTTT");
-            for ( Integer pId :e.getParticipants()){
-                ms.sendAsync(addresses[pId], TwoPCProtocol.Abort.class.getName(),sp.encode(abortt) );
-            }
-            System.out.println("ABOOOOOOOOOOORRRTTTTTTTTTTT2");
-
-            currentFutures.get(txId).complete(s.encode(new KeystoreProtocol.PutResp(false)));
-            System.out.println("ABOOOOOOOOOOORRRTTTTTTTTTTT3");
-        }
-    }
 
     /////////////////////////GET///////////////////////////
 
     private void processGetResp(byte[] m) {
         TwoPCProtocol.GetControllerResp rp = sp.decode(m);
         Transaction e = currentTransactions.get(rp.txId);
-        e.setParticipant_resp(rp.pId,TwoPCProtocol.Status.COMMITED);
-        if (e.check_commit()){
-            e.setPhase(Transaction.Phase.COMMITED);
+        e.setParticipant_resp(rp.pId,Phase.COMMITED);
+        if (e.check_phase(Phase.COMMITED)){
+            e.setPhase(Phase.COMMITED);
             KeystoreProtocol.GetResp p = new KeystoreProtocol.GetResp(rp.values);
-            System.out.println(currentFutures.size());
-            currentFutures.remove(rp.txId).complete(s.encode(p));
-            System.out.println(currentFutures.size());
+
         }
     }
 
@@ -149,41 +209,6 @@ public class Server {
         Map<Integer, Collection<Long>> separatedValues = valuesSeparator(keys);
         tx.setParticipants(separatedValues.keySet());
         get(tx.getId(), separatedValues);
-    }
-
-    private Map<Integer, Map<Long,byte[]>> valuesSeparator(Map<Long,byte[]> values) {
-        Map<Integer, Map<Long, byte []>> res = new HashMap<>();
-        for(Map.Entry<Long, byte []> value: values.entrySet()){
-            int ks = (int) (value.getKey() % (long) addresses.length);
-            System.out.println("Participante " + ks);
-            if(!res.containsKey(ks)) res.put(ks, new HashMap<>());
-            Map<Long, byte []> ksMap = res.get(ks);
-            ksMap.put(value.getKey(), value.getValue());
-            res.put(ks, ksMap);
-        }
-        return res;
-    }
-
-    private void get(int txId, Map<Integer, Collection<Long>> separatedValues) {
-
-        for (Map.Entry<Integer, Collection<Long>> ksValues : separatedValues.entrySet()) {
-            int participant = ksValues.getKey();
-            System.out.println("Enviado para o participante" + participant);
-            TwoPCProtocol.GetControllerReq contReq = new TwoPCProtocol.GetControllerReq(txId, participant, ksValues.getValue());
-            ms.sendAsync(addresses[ participant],
-                    TwoPCProtocol.GetControllerReq.class.getName(),
-                    sp.encode(contReq));
-        }
-    }
-
-    /////////////////////////PUT///////////////////////////
-
-    private void processPutReq(Transaction tx, KeystoreProtocol.PutReq req) {
-        log.write(tx.getId(),req.values);
-        Map<Long,byte[]> values = req.values;
-        Map<Integer, Map<Long, byte []>> separatedValues = valuesSeparator(values);
-        tx.setParticipants(separatedValues.keySet());
-        initPutTPC1(tx.getId(), separatedValues);
     }
 
     private Map<Integer,Collection<Long>> valuesSeparator(Collection<Long> keys){
@@ -201,64 +226,139 @@ public class Server {
 
 
 
+    private void get(int txId, Map<Integer, Collection<Long>> separatedValues) {
+
+        for (Map.Entry<Integer, Collection<Long>> ksValues : separatedValues.entrySet()) {
+            int participant = ksValues.getKey();
+            System.out.println("Enviado para o participante" + participant);
+            TwoPCProtocol.GetControllerReq contReq = new TwoPCProtocol.GetControllerReq(txId, participant, ksValues.getValue());
+            ms.sendAsync(addresses[ participant],
+                    TwoPCProtocol.GetControllerReq.class.getName(),
+                    sp.encode(contReq));
+        }
+    }
+
+    /////////////////////////PUT///////////////////////////
+
+    private void processPutReq(Transaction tx, KeystoreProtocol.PutReq req) {
+        Map<Long,byte[]> values = req.values;
+        Map<Integer, Map<Long, byte []>> separatedValues = valuesSeparator(values);
+        tx.setParticipants(separatedValues.keySet());
+        SimpleTransaction simpleTx = new SimpleTransaction(tx.getId(),tx.get_client_txId(),tx.getAddress(),separatedValues);
+        log.write(tx.getId(),simpleTx);
+        log.write(tx.getId(),Phase.STARTED.toString());
+        initPutTPC1(tx.getId(), separatedValues);
+    }
+
+
+
+    private Map<Integer, Map<Long,byte[]>> valuesSeparator(Map<Long,byte[]> values) {
+        Map<Integer, Map<Long, byte []>> res = new HashMap<>();
+        for(Map.Entry<Long, byte []> value: values.entrySet()){
+            int ks = (int) (value.getKey() % (long) addresses.length);
+            System.out.println("Participante " + ks);
+            if(!res.containsKey(ks)) res.put(ks, new HashMap<>());
+            Map<Long, byte []> ksMap = res.get(ks);
+            ksMap.put(value.getKey(), value.getValue());
+            res.put(ks, ksMap);
+        }
+        return res;
+    }
+
+
 
     private void initPutTPC1(int txId, Map<Integer, Map<Long, byte[]>> separatedValues) {
 
-        currentFutures2.put(txId,new HashMap<>());
+        currentFuturesP1.put(txId,new HashMap<>());
+
         for (Map.Entry<Integer, Map<Long, byte[]>> ksValues : separatedValues.entrySet()) {
             int pId = ksValues.getKey();
-            TwoPCProtocol.PutControllerPreparedReq contReq = new TwoPCProtocol.PutControllerPreparedReq(txId, pId, ksValues.getValue());
-            String type = TwoPCProtocol.PutControllerPreparedReq.class.getName();
+            TwoPCProtocol.ControllerPreparedReq contReq = new TwoPCProtocol.ControllerPreparedReq(txId, pId, ksValues.getValue());
+            String type = TwoPCProtocol.ControllerPreparedReq.class.getName();
             send_iteractive(pId,txId,contReq,type);
-           /* ms.sendAsync(addresses[pId],
-                    type,
-                    sp.encode(contReq));
 
-            HashMap<Integer, CompletableFuture<Void>> arr = currentFutures2.get(txId);
-            CompletableFuture<Void> cp = new CompletableFuture<>();
-            arr.put(pId,cp);
-            currentFutures2.put(txId, arr );
-
-            CompletableFuture.supplyAsync(()-> check_response(cp, contReq,addresses[ pId], 5,type));*/
         }
     }
+
 
 
     private void initTPC2(Transaction e) {
         Collection<Integer> participants =  e.getParticipants();
         int txId = e.getId();
+        currentFuturesP2.put(txId,new HashMap<>());
         for (Integer pId: participants){
-            TwoPCProtocol.PutControllerCommitReq contReq = new TwoPCProtocol.PutControllerCommitReq(txId, pId);
-            String type = TwoPCProtocol.PutControllerCommitReq.class.getName();
-            send_iteractive(pId,txId,contReq,type);
-           /* ms.sendAsync(addresses[pId],
-                    type,
-                    sp.encode(contReq));
+            TwoPCProtocol.ControllerCommitReq contReq = new TwoPCProtocol.ControllerCommitReq(txId, pId);
+            String type = TwoPCProtocol.ControllerCommitReq.class.getName();
+            send_iteractive2(pId,txId,contReq,type, currentFuturesP2);
 
-            HashMap<Integer, CompletableFuture<Void>> arr = currentFutures2.get(txId);
-            CompletableFuture<Void> cp = new CompletableFuture<>();
-            arr.put(pId,cp);
-            currentFutures2.put(txId, arr );
-
-            CompletableFuture.supplyAsync(()-> check_response(cp, contReq,addresses[ pId], 5,type));*/
         }
     }
 
-    private void send_iteractive(int pId, int txId, TwoPCProtocol.PutControllerReq contReq, String type){
+    private synchronized void initAbort(int txId){
+        Transaction e = currentTransactions.get(txId);
+        currentFuturesA.put(txId,new HashMap<>());
+
+        if (e.getPhase()!= Phase.ROLLBACKED){
+            log.write(txId,Phase.ABORT.toString());
+            e.setPhase(Phase.ABORT);
+            KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp(false, e.get_client_txId());
+            ms.sendAsync(e.getAddress(), KeystoreProtocol.PutResp.class.getName(), s.encode(p));
+
+            String type = TwoPCProtocol.ControllerAbortReq.class.getName();
+            for ( Integer pId :e.getParticipants()){
+                TwoPCProtocol.ControllerAbortReq abortt = new TwoPCProtocol.ControllerAbortReq(txId,pId);
+                ms.sendAsync(addresses[pId], type ,sp.encode(abortt) );
+                send_iteractive2(pId,txId,abortt,type, currentFuturesA);
+            }
+        }
+    }
+
+
+    private void send_iteractive(int pId, int txId, TwoPCProtocol.ControllerReq contReq, String type){
         ms.sendAsync(addresses[pId],
                 type,
                 sp.encode(contReq));
 
-        HashMap<Integer, CompletableFuture<Void>> arr = currentFutures2.get(txId);
+      /*  HashMap<Integer, CompletableFuture<Void>> arr = currentFuturesP1.get(txId);
         CompletableFuture<Void> cp = new CompletableFuture<>();
         arr.put(pId,cp);
-        currentFutures2.put(txId, arr );
+        currentFuturesP1.put(txId, arr );
+        System.out.println("TAMANHO:" + currentFuturesP1.get(txId).size());*/
 
-        CompletableFuture.supplyAsync(()-> check_response(cp, contReq,addresses[ pId], 5,type));
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        scheduler.scheduleAtFixedRate(()->{
+            check(txId,pId,Phase.PREPARED, scheduler);
+        }, 5, 5, TimeUnit.SECONDS);
+
+      //  CompletableFuture.supplyAsync(()-> check_response(cp, contReq,addresses[ pId], 2,type));
+    }
+
+    public void check(int txId, int pId, Phase phase, ScheduledExecutorService scheduler){
+            System.out.println("CHECKING");
+            Transaction e = currentTransactions.get(txId);
+            if (e.getParticipantStatus(pId) == phase){
+               scheduler.shutdown();
+            }
+    }
+
+    private void send_iteractive2(int pId, int txId, TwoPCProtocol.ControllerReq contReq, String type, HashMap<Integer, HashMap<Integer, CompletableFuture<Void>>> futures){
+        ms.sendAsync(addresses[pId],
+                type,
+                sp.encode(contReq));
+
+        HashMap<Integer, CompletableFuture<Void>> arr = futures.get(txId);
+        CompletableFuture<Void> cp = new CompletableFuture<>();
+        arr.put(pId,cp);
+        futures.put(txId, arr );
+        System.out.println("TAMANHO:" + futures.get(txId).size());
+
+        CompletableFuture.supplyAsync(()-> check_response(cp, contReq,addresses[ pId],type));
     }
 
 
-    private CompletableFuture<Void> check_response(CompletableFuture<Void> cp,  TwoPCProtocol.PutControllerReq contReq, Address a, int rep,String type){
+
+
+    private CompletableFuture<Void> check_response(CompletableFuture<Void> cp,  TwoPCProtocol.ControllerReq contReq, Address a, int rep,String type){
         System.out.println("Waiting for response. Remaning attempts:" + rep);
         if (rep > 0){
             try {
@@ -274,88 +374,86 @@ public class Server {
             }
         }
         else {
-            if (!currentFutures2.get(contReq.txId).get(contReq.pId).isDone()){
-                abort_complete(contReq.txId);
+            if (!currentFuturesP1.get(contReq.txId).get(contReq.pId).isDone()){
+                initAbort(contReq.txId);
             }
         }
         return CompletableFuture.completedFuture(null);
     }
 
-   /* private CompletableFuture<Void> check_responseCommit(CompletableFuture<Void> cp,  TwoPCProtocol.PutControllerReq contReq, Address a, int rep, String type){
-        System.out.println("Waiting for response. Remaning attempts:" + rep);
-        if (rep > 0){
-            try {
-                cp.get(1, TimeUnit.SECONDS);
-            } catch (InterruptedException | ExecutionException e) {
-                e.printStackTrace();
-            } catch (TimeoutException e) {
-                ms.sendAsync(a,
-                        type,
-                        sp.encode(contReq));
-                System.out.println("HELLOoooooo");
-                check_responseCommit(cp, contReq,a,--rep,type);
-            }
-        }
-        else {
-            if (!currentFutures2.get(contReq.txId).get(contReq.pId).isDone()){
-                abort_complete(contReq.txId);
-            }
+    private CompletableFuture<Void> check_response(CompletableFuture<Void> cp,  TwoPCProtocol.ControllerReq contReq, Address a,String type){
+        System.out.println("Waiting for response from:" + a.toString());
+        try {
+            cp.get(5000, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+        } catch (TimeoutException e) {
+            ms.sendAsync(a,
+                    type,
+                    sp.encode(contReq));
+            System.out.println("HELLOoooooo");
+            check_response(cp, contReq,a,type);
         }
         return CompletableFuture.completedFuture(null);
-    }*/
+    }
 
 
-
-    private void processTPC1(Address o, byte[] m) {
+    private void processTPC1(byte[] m) {
         TwoPCProtocol.ControllerPreparedResp rp = sp.decode(m);
-
         Transaction e = currentTransactions.get(rp.txId);
-        if (e.getPhase()!=Transaction.Phase.ROLLBACKED){
-            if (rp.resp == TwoPCProtocol.Status.PREPARED_OK && e.getParticipantStatus(rp.pId) != TwoPCProtocol.Status.PREPARED_OK){
-                e.setParticipant_resp(rp.pId, rp.resp);
-                System.out.println(currentFutures2.get(rp.txId).size());
-                currentFutures2.get(rp.txId).remove(rp.pId).complete(null);
-                System.out.println(currentFutures2.get(rp.txId).size());
-                if (e.check_prepared()){
-                    log.write(rp.txId,Log.Phase.PREPARED.toString());
-                    e.setPhase(Transaction.Phase.PREPARED);
+        if (e.getPhase()!=Phase.ABORT){
+            if (e.getParticipantStatus(rp.pId) != Phase.PREPARED){
+                e.setParticipant_resp(rp.pId, Phase.PREPARED);
+             //   currentFuturesP1.get(rp.txId).remove(rp.pId).complete(null);
+                if (e.check_phase(Phase.PREPARED)){
+                    e.setPhase(Phase.PREPARED);
+                    log.write(rp.txId,Phase.PREPARED.toString());
+                    KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp(true, e.get_client_txId());
+                    ms.sendAsync(e.getAddress(), KeystoreProtocol.PutResp.class.getName(), s.encode(p));
                     initTPC2(e);
                 }
             }
-            else if (rp.resp == TwoPCProtocol.Status.ABORT){
-               abort_complete(rp.txId);
+        }
+    }
+
+    private void processTPC2(byte[] m){
+        System.out.println("A acabar");
+        TwoPCProtocol.ControllerCommitedResp rp = sp.decode(m);
+        Transaction e = currentTransactions.get(rp.txId);
+        if (e.getPhase()!=Phase.ABORT) {
+            if (e.getParticipantStatus(rp.pId) != Phase.COMMITED) {
+                e.setParticipant_resp(rp.pId, Phase.COMMITED);
+                currentFuturesP2.get(rp.txId).remove(rp.pId).complete(null);
+                if (e.check_phase(Phase.COMMITED)) {
+                    e.setPhase(Phase.COMMITED);
+                    log.write(rp.txId, Phase.COMMITED.toString());
+                    currentTransactions.remove(rp.txId);
+                    // currentFutures.remove(rp.txId).complete(s.encode(p));
+                    System.out.println("Done");
+                }
             }
         }
     }
 
-
-
-
-
-//    private HashMap<Integer, HashMap<Integer, CompletableFuture<Void>>> currentFutures2;
-    private void processTPC2(byte[] m){
-        System.out.println("A acabar");
-        TwoPCProtocol.ControllerCommitResp rp = sp.decode(m);
-
+    private void processAbort(byte[] bytes) {
+        TwoPCProtocol.ControllerAbortResp rp = sp.decode(bytes);
         Transaction e = currentTransactions.get(rp.txId);
-        System.out.println(rp.resp.toString());
-        if (rp.resp == TwoPCProtocol.Status.COMMITED && e.getParticipantStatus(rp.pId) != TwoPCProtocol.Status.COMMITED){
-            e.setParticipant_resp(rp.pId, rp.resp);
-            System.out.println(currentFutures2.get(rp.txId).size());
-            currentFutures2.get(rp.txId).remove(rp.pId).complete(null);
-            System.out.println(currentFutures2.get(rp.txId).size());
-            if (e.check_commit()){
-                e.setPhase(Transaction.Phase.COMMITED);
-                log.write(rp.txId,Log.Phase.COMMITED.toString());
-                KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp(true);
-                currentFutures.get(rp.txId).complete(s.encode(p));
-                currentFutures.remove(rp.txId);
-                System.out.println("Done");
+        if (e.getPhase()!=Phase.ROLLBACKED) {
+            System.out.println("FASE1:" + e.getParticipantStatus(rp.pId).toString());
+            if (e.getParticipantStatus(rp.pId) != Phase.ROLLBACKED) {
+                e.setParticipant_resp(rp.pId, Phase.ROLLBACKED);
+                System.out.println("FASE2:" + e.getParticipantStatus(rp.pId).toString());
+                System.out.println("HELO: " + currentFuturesA.get(rp.txId).size());
+                currentFuturesA.get(rp.txId).remove(rp.pId).complete(null);
+                if (e.check_phase(Phase.ROLLBACKED)) {
+                    currentTransactions.remove(rp.txId);
+                    System.out.println("All prepared for tx:" + e.getId());
+                    e.setPhase(Phase.ROLLBACKED);
+                    log.write(rp.txId, Phase.ROLLBACKED.toString());
 
+                    System.out.println("ABOOOOOOOOOOORRRTTTTTTTTTTTEEDDD");
+                }
             }
-        }
-        else if (rp.resp == TwoPCProtocol.Status.ABORT){
-            abort_complete(rp.txId);
         }
     }
 

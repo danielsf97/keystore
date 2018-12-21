@@ -3,15 +3,13 @@ package keystore;
 import io.atomix.storage.journal.SegmentedJournal;
 import io.atomix.storage.journal.SegmentedJournalReader;
 import io.atomix.storage.journal.SegmentedJournalWriter;
+import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Serializer;
 
-import java.util.List;
+import java.net.Inet4Address;
 
 public class Log<T> {
 
-    public enum Phase {
-        STARTED, PREPARED, COMMITED, ROLLBACKED
-    }
 
     public static class LogEntry<T> {
         private int trans_id;
@@ -47,6 +45,9 @@ public class Log<T> {
     public Log(String name) {
         this.s = Serializer.builder()
                 .withTypes(Log.LogEntry.class)
+                .withTypes(SimpleTransaction.class)
+                .withTypes(Address.class)
+                .withTypes(Inet4Address.class)
                 .build();
 
         this.j = SegmentedJournal.builder()
@@ -59,9 +60,14 @@ public class Log<T> {
 
     }
 
+    public long last_index(){
+        System.out.println(w.getLastIndex());
+        return w.getLastIndex();
+    }
+
     public void write(int transId, T action) {
         w = j.writer();
-        w.append(new Log.LogEntry(transId, action));
+        w.append(new Log.LogEntry<Object>(transId, action));
         w.flush();
       //  w.close();
 
@@ -90,7 +96,7 @@ public class Log<T> {
         System.out.println("Verificar existência de ação: " + trans_id + " -> " + action);
         while(r.hasNext() && !exists) {
             Log.LogEntry e = (Log.LogEntry) r.next().entry();
-            System.out.println(e.trans_id + " -> " + e.action);
+            System.out.println(r.getCurrentIndex() +  e.trans_id + " -> " + e.action);
             if(e.trans_id == trans_id && action.equals(e.action)) exists = true;
         }
         System.out.println("Returned " + exists);
