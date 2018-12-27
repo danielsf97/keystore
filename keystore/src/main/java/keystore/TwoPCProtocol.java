@@ -24,7 +24,7 @@ public class TwoPCProtocol {
                         )
                 .build();
     }
-    
+
 
     public static class ControllerReq{
         public int txId;
