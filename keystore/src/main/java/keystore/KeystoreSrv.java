@@ -5,12 +5,10 @@ import io.atomix.cluster.messaging.impl.NettyMessagingService;
 import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Serializer;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class KeystoreSrv  {
 
@@ -23,6 +21,10 @@ public class KeystoreSrv  {
 
     private Scanner sc = new Scanner(System.in);
     private Map<Long, byte[]> data;
+
+    private Map<Long, ReentrantLock> keyLocks;
+    ReentrantLock keyLocksGlobalLock;
+
     private static ManagedMessagingService ms;
     private static Serializer s;
     private Log<Object> log;
@@ -48,6 +50,8 @@ public class KeystoreSrv  {
         this.pendent_puts = new HashMap<>();
 
         data = new HashMap<>();
+        keyLocks = new HashMap<>();
+        keyLocksGlobalLock = new ReentrantLock();
 
         restore();
 
@@ -66,7 +70,7 @@ public class KeystoreSrv  {
     }
 
     private void restore() {
-        HashMap<Integer,HashMap<Long,byte[]>> keys = new HashMap<>();
+        HashMap<Integer,HashMap<Long,byte[]>> transKeys = new HashMap<>();
         HashMap<Integer,String> phases = new HashMap<>();
         int i = 0;
         boolean not_null = true;
@@ -77,7 +81,7 @@ public class KeystoreSrv  {
                 System.out.println(e.toString());
                 Object o = e.getAction();
                 if (o instanceof HashMap) {
-                    keys.put(e.getTrans_id(), (HashMap<Long, byte[]>) o);
+                    transKeys.put(e.getTrans_id(), (HashMap<Long, byte[]>) o);
                 }
                 else {
                     phases.put(e.getTrans_id(), (String) o );
@@ -87,10 +91,21 @@ public class KeystoreSrv  {
         }
         for(Map.Entry<Integer,String> entry : phases.entrySet()){
             if (entry.getValue().equals(Phase.PREPARED.toString())){
-                pendent_puts.put(entry.getKey(),keys.get(entry.getKey()));
+                HashMap<Long, byte[]> keys = transKeys.get(entry.getKey());
+                pendent_puts.put(entry.getKey(),keys);
+                for(Long key: keys.keySet()) {
+                    ReentrantLock lock = new ReentrantLock();
+                    lock.lock();
+                    keyLocks.put(key, lock);
+                }
             }
             else if (entry.getValue().equals(Phase.COMMITED.toString())){
-                data.putAll(keys.get(entry.getKey()));
+                HashMap<Long, byte[]> keys = transKeys.get(entry.getKey());
+                for(Map.Entry<Long, byte[]> key: keys.entrySet()){
+                    data.put(key.getKey(), key.getValue());
+                    keyLocks.put(key.getKey(), new ReentrantLock());
+                }
+
             }
         }
     }
@@ -106,6 +121,7 @@ public class KeystoreSrv  {
         }
         else {
             log.write(trans_id, Phase.ROLLBACKED.toString());
+            releaseLocksAbort(pendent_puts.get(trans_id));
             pendent_puts.remove(trans_id);
             TwoPCProtocol.ControllerAbortResp p = new TwoPCProtocol.ControllerAbortResp(trans_id,myId);
             ms.sendAsync(address, TwoPCProtocol.ControllerAbortResp.class.getName(),s.encode(p));
@@ -143,38 +159,72 @@ public class KeystoreSrv  {
             ms.sendAsync(address, TwoPCProtocol.ControllerAbortResp.class.getName(),s.encode(p));
         }*/
         else {
-            System.out.print("You prepared for transaction " + trans_id + "?");
+/*            System.out.print("You prepared for transaction " + trans_id + "?");
             String line = sc.nextLine();
-            if (line != null && line.equals("yes")) {
+            if (line != null && line.equals("yes")) {*/
                 Map<Long, byte[]> keys =  prepReq.values;
+                getLocks(new TreeSet<Long>(keys.keySet()));
                 pendent_puts.put(trans_id, keys);
                 log.write(trans_id,keys);
                 log.write(trans_id, Phase.PREPARED.toString());
                 TwoPCProtocol.ControllerPreparedResp p = new TwoPCProtocol.ControllerPreparedResp(trans_id,myId);
                 ms.sendAsync(address, TwoPCProtocol.ControllerPreparedResp.class.getName(),s.encode(p));
-            } else {
+/*            } else {
                 log.write(trans_id, Phase.ROLLBACKED.toString());
                 TwoPCProtocol.ControllerAbortReq p = new TwoPCProtocol.ControllerAbortReq(trans_id,myId);
                 ms.sendAsync(address, TwoPCProtocol.ControllerAbortReq.class.getName(),s.encode(p));
-            }
+            }*/
         }
     }
 
     private void putTwoPC2(Address address, byte[] m) {
         TwoPCProtocol.ControllerCommitReq commitReq = s.decode(m);
         int trans_id = commitReq.txId;
-        if (pendent_puts.containsKey(trans_id)){ // se estiver committed é porque não existe nos pendent_puts
+        if (!pendent_puts.containsKey(trans_id)){ // se estiver committed é porque não existe nos pendent_puts
             System.out.println("OO");
             TwoPCProtocol.ControllerCommitedResp p = new TwoPCProtocol.ControllerCommitedResp(trans_id,myId);
             ms.sendAsync(address, TwoPCProtocol.ControllerCommitedResp.class.getName(),s.encode(p));
         }
         else {
             data.putAll(pendent_puts.get(trans_id));
+            releaseLocks(pendent_puts.get(trans_id));
             pendent_puts.remove(trans_id);
             log.write(trans_id, Phase.COMMITED.toString());
             System.out.println("Transaction " + trans_id + " commited!!");
             TwoPCProtocol.ControllerCommitedResp p = new TwoPCProtocol.ControllerCommitedResp(trans_id,myId);
             ms.sendAsync(address, TwoPCProtocol.ControllerCommitedResp.class.getName(),s.encode(p));
+        }
+    }
+
+    private void getLocks(TreeSet<Long> keys) {
+        this.keyLocksGlobalLock.lock();
+        for(Long keyId: keys){
+            if(keyLocks.containsKey(keyId)){
+                //fazer unlock ao global porque podemos bloquear no lock da chave
+                this.keyLocksGlobalLock.unlock();
+                keyLocks.get(keyId).lock();
+                this.keyLocksGlobalLock.lock();
+            }else{
+                ReentrantLock lock = new ReentrantLock();
+                lock.lock();
+                keyLocks.put(keyId, lock);
+            }
+        }
+        this.keyLocksGlobalLock.unlock();
+    }
+
+    private void releaseLocksAbort(Map<Long,byte[]> keys) {
+        this.keyLocksGlobalLock.lock();
+        for(Long keyId: keys.keySet()){
+            keyLocks.get(keyId).unlock();
+            if(!data.containsKey(keyId)) keyLocks.remove(keyId);
+        }
+        this.keyLocksGlobalLock.unlock();
+    }
+
+    private void releaseLocks(Map<Long,byte[]> keys) {
+        for(Long keyId: keys.keySet()){
+            keyLocks.get(keyId).unlock();
         }
     }
 

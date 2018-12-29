@@ -19,8 +19,6 @@ class Transaction {
     private Address address;
 
 
-
-
     Transaction(Integer id, Integer client_txId,Address address){
 
         this.id = id;
@@ -44,6 +42,10 @@ class Transaction {
         }
     }
 
+    int getId(){
+        return id;
+    }
+
     Address getAddress(){
         return address;
     }
@@ -52,12 +54,29 @@ class Transaction {
         return client_txId;
     }
 
-    void setPhase(Phase phase){
-        this.phase = phase;
-    }
-
     Phase getPhase(){
         return phase;
+    }
+
+    Collection<Integer> getParticipants() {
+        return participants;
+    }
+
+    Phase getParticipantStatus(int pId){
+        return participants_status.get(pId);
+    }
+
+    public Map<Long,byte[]> getKeys (){
+        return keys;
+    }
+
+    public void setKeys(Map<Long,byte[]> chaves){
+        System.out.println("A colocar chaves");
+        keys.putAll(chaves);
+    }
+
+    void setPhase(Phase phase){
+        this.phase = phase;
     }
 
     void setParticipants(Collection<Integer> participants){
@@ -67,9 +86,7 @@ class Transaction {
         }
     }
 
-
-
-    void setParticipant_resp(Integer participant, Phase resp){
+    void setParticipantStatus(Integer participant, Phase resp){
         System.out.println("CHANGING STATUS");
         if (phase == Phase.STARTED){
             participants_status.put(participant, resp);
@@ -82,18 +99,6 @@ class Transaction {
         }
     }
 
-    int getId(){
-        return id;
-    }
-
-    Collection<Integer> getParticipants() {
-        return participants;
-    }
-
-    Phase getParticipantStatus(int pId){
-        return participants_status.get(pId);
-    }
-
 
     boolean check_phase(Phase phase){
         boolean status = true;
@@ -104,16 +109,6 @@ class Transaction {
         }
 
         return status;
-    }
-
-
-    public void setKeys(Map<Long,byte[]> chaves){
-        System.out.println("A colocar chaves");
-        keys.putAll(chaves);
-    }
-
-    public Map<Long,byte[]> getKeys (){
-        return keys;
     }
 
 

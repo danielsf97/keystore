@@ -176,7 +176,7 @@ public class Server {
     private void processAbort2(byte[] m) {
         TwoPCProtocol.ControllerAbortReq rp = sp.decode(m);
         Transaction e = currentTransactions.get(rp.txId);
-        e.setParticipant_resp(rp.pId, Phase.ROLLBACKED);
+        e.setParticipantStatus(rp.pId, Phase.ROLLBACKED);
         initAbort(e.getId());
 
     }
@@ -191,7 +191,7 @@ public class Server {
         if (currentTransactions.containsKey(rp.txId)) {
             Transaction e = currentTransactions.get(rp.txId);
             if (e.getParticipantStatus(rp.pId) != Phase.COMMITED)
-            e.setParticipant_resp(rp.pId, Phase.COMMITED);
+                e.setParticipantStatus(rp.pId, Phase.COMMITED);
             e.setKeys(rp.values);
             if (e.check_phase(Phase.COMMITED)) {
                 e.setPhase(Phase.COMMITED);
@@ -347,15 +347,13 @@ public class Server {
         }, 0, 5, TimeUnit.SECONDS);
     }
 
-
-
     private void processTPC1(byte[] m) {
         TwoPCProtocol.ControllerPreparedResp rp = sp.decode(m);
         Transaction e = currentTransactions.get(rp.txId);
         if (e.getPhase()!=Phase.ABORT){
             if (e.getParticipantStatus(rp.pId) != Phase.PREPARED){
                 System.out.println("Init Commit: " + rp.pId);
-                e.setParticipant_resp(rp.pId, Phase.PREPARED);
+                e.setParticipantStatus(rp.pId, Phase.PREPARED);
                 if (e.check_phase(Phase.PREPARED)){
                     e.setPhase(Phase.PREPARED);
                     log.write(rp.txId,Phase.PREPARED.toString());
@@ -375,7 +373,7 @@ public class Server {
             Transaction e = currentTransactions.get(rp.txId);
             if (e.getPhase() != Phase.ABORT) {
                 if (e.getParticipantStatus(rp.pId) != Phase.COMMITED) {
-                    e.setParticipant_resp(rp.pId, Phase.COMMITED);
+                    e.setParticipantStatus(rp.pId, Phase.COMMITED);
                     if (e.check_phase(Phase.COMMITED)) {
                         e.setPhase(Phase.COMMITED);
                         log.write(rp.txId, Phase.COMMITED.toString());
@@ -394,7 +392,7 @@ public class Server {
             if (e.getPhase() != Phase.ROLLBACKED) {
                 System.out.println("FASE1:" + e.getParticipantStatus(rp.pId).toString());
                 if (e.getParticipantStatus(rp.pId) != Phase.ROLLBACKED) {
-                    e.setParticipant_resp(rp.pId, Phase.ROLLBACKED);
+                    e.setParticipantStatus(rp.pId, Phase.ROLLBACKED);
                     System.out.println("FASE2:" + e.getParticipantStatus(rp.pId).toString());
                     if (e.check_phase(Phase.ROLLBACKED)) {
                         currentTransactions.remove(rp.txId);

@@ -23,13 +23,13 @@ public class Client {
         chaves.put(1000003L, "Chave 4".getBytes());
         chaves.put(1000004L, "Chave 5".getBytes());
 
-/*        ks.put(chaves).thenAccept((b) -> {
+        ks.put(chaves).thenAccept((b) -> {
             if(b){
                 System.out.println("Chaves Adicionadas");
             }else{
                 System.out.println("Chaves não Adicionadas");
             }
-        });*/
+        }).get();
 
       /*  ks.put(chaves).thenAccept((b) -> {
             if(b){

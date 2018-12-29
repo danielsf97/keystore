@@ -36,6 +36,7 @@ public class KeystoreCli implements Keystore {
 
         ms.registerHandler(KeystoreProtocol.GetResp.class.getName(),(o,m)->{
             KeystoreProtocol.GetResp ooo = s.decode(m);
+
             System.out.println("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO");
             get_requests.remove(ooo.txId).complete(ooo.values);
         },es);
