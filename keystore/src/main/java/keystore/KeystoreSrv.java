@@ -21,16 +21,17 @@ public class KeystoreSrv  {
 
     private Scanner sc = new Scanner(System.in);
     private Map<Long, byte[]> data;
-
     private Map<Long, ReentrantLock> keyLocks;
-    ReentrantLock keyLocksGlobalLock;
+    private Map<Integer,Map<Long, byte[]>> pendentPuts;
+    private Set<Integer> runningTransactions;
+
+    private ReentrantLock runningTransactionsGlobalLock;
+    private ReentrantLock keyLocksGlobalLock;
 
     private static ManagedMessagingService ms;
     private static Serializer s;
     private Log<Object> log;
     private int myId;
-
-    private Map<Integer,Map<Long, byte[]>> pendent_puts;
 
     private KeystoreSrv(int id){
 
@@ -47,11 +48,14 @@ public class KeystoreSrv  {
 
         this.log = new Log<>("KeyStoreSrv" + id);
 
-        this.pendent_puts = new HashMap<>();
+        this.pendentPuts = new HashMap<>();
+        this.data = new HashMap<>();
+        this.keyLocks = new HashMap<>();
+        this.runningTransactions = new TreeSet<>();
 
-        data = new HashMap<>();
-        keyLocks = new HashMap<>();
-        keyLocksGlobalLock = new ReentrantLock();
+        this.runningTransactionsGlobalLock = new ReentrantLock();
+        this.keyLocksGlobalLock = new ReentrantLock();
+
 
         restore();
 
@@ -92,7 +96,8 @@ public class KeystoreSrv  {
         for(Map.Entry<Integer,String> entry : phases.entrySet()){
             if (entry.getValue().equals(Phase.PREPARED.toString())){
                 HashMap<Long, byte[]> keys = transKeys.get(entry.getKey());
-                pendent_puts.put(entry.getKey(),keys);
+                pendentPuts.put(entry.getKey(),keys);
+                runningTransactions.add(entry.getKey());
                 for(Long key: keys.keySet()) {
                     ReentrantLock lock = new ReentrantLock();
                     lock.lock();
@@ -114,17 +119,38 @@ public class KeystoreSrv  {
         System.out.println("ABORT");
         TwoPCProtocol.ControllerAbortReq ab = s.decode(bytes);
         int trans_id = ab.txId;
-        if(!pendent_puts.containsKey(trans_id)){
+
+        boolean existentTransaction;
+
+        runningTransactionsGlobalLock.lock();
+        existentTransaction = runningTransactions.remove(trans_id);
+        runningTransactionsGlobalLock.unlock();
+
+        if(!existentTransaction){
+            //Quando a transação já fez rollback
+
             TwoPCProtocol.ControllerAbortResp p = new TwoPCProtocol.ControllerAbortResp(trans_id,myId);
             ms.sendAsync(address, TwoPCProtocol.ControllerAbortResp.class.getName(),s.encode(p));
             System.out.println("Transaction " + trans_id + " already doesn't exist!!");
         }
         else {
+            // Quando conseguiu obter o lock(está prepared)
+            // Quando ainda está à espera de obter o lock (não está nos pendentPuts)
             log.write(trans_id, Phase.ROLLBACKED.toString());
-            releaseLocksAbort(pendent_puts.get(trans_id));
-            pendent_puts.remove(trans_id);
+
             TwoPCProtocol.ControllerAbortResp p = new TwoPCProtocol.ControllerAbortResp(trans_id,myId);
             ms.sendAsync(address, TwoPCProtocol.ControllerAbortResp.class.getName(),s.encode(p));
+
+            synchronized (pendentPuts){
+                Map<Long, byte[]> pendentKeys = pendentPuts.remove(trans_id);
+
+                //Se em Prepared (Locks adquiridos)
+                if(pendentKeys != null){
+                    releaseLocksAbort(pendentKeys);
+
+                }
+            }
+
             System.out.println("Transaction " + trans_id + " rollbacked from prepared!!");
         }
     }
@@ -136,8 +162,11 @@ public class KeystoreSrv  {
         Collection<Long> keys = prepReq.keys;
         Map<Long,byte[]> rp = new HashMap<>();
         for(Long e : keys){
-            if (data.containsKey(e))
-                rp.put(e,data.get(e));
+
+            synchronized (data) {
+                if (data.containsKey(e))
+                    rp.put(e, data.get(e));
+            }
         }
         TwoPCProtocol.GetControllerResp resp = new TwoPCProtocol.GetControllerResp(prepReq.txId,prepReq.pId,rp);
         ms.sendAsync(address,TwoPCProtocol.GetControllerResp.class.getName(),s.encode(resp));
@@ -149,7 +178,13 @@ public class KeystoreSrv  {
         System.out.println("PUT in keystore");
         TwoPCProtocol.ControllerPreparedReq prepReq = s.decode(m);
         int trans_id = prepReq.txId;
-        if(pendent_puts.containsKey(trans_id)){
+
+        boolean pendentPutsContainsKey;
+        synchronized (pendentPuts){
+            pendentPutsContainsKey = pendentPuts.containsKey(trans_id);
+        }
+
+        if(pendentPutsContainsKey){ //se já está prepared
             System.out.println("Already sent prepared");
             TwoPCProtocol.ControllerPreparedResp p = new TwoPCProtocol.ControllerPreparedResp(trans_id,myId);
             ms.sendAsync(address, TwoPCProtocol.ControllerPreparedResp.class.getName(),s.encode(p));
@@ -158,17 +193,30 @@ public class KeystoreSrv  {
             TwoPCProtocol.ControllerAbortResp p = new TwoPCProtocol.ControllerAbortResp(trans_id,myId);
             ms.sendAsync(address, TwoPCProtocol.ControllerAbortResp.class.getName(),s.encode(p));
         }*/
-        else {
+        else { //se não está prepared
 /*            System.out.print("You prepared for transaction " + trans_id + "?");
             String line = sc.nextLine();
             if (line != null && line.equals("yes")) {*/
                 Map<Long, byte[]> keys =  prepReq.values;
                 getLocks(new TreeSet<Long>(keys.keySet()));
-                pendent_puts.put(trans_id, keys);
-                log.write(trans_id,keys);
-                log.write(trans_id, Phase.PREPARED.toString());
-                TwoPCProtocol.ControllerPreparedResp p = new TwoPCProtocol.ControllerPreparedResp(trans_id,myId);
-                ms.sendAsync(address, TwoPCProtocol.ControllerPreparedResp.class.getName(),s.encode(p));
+
+                this.runningTransactionsGlobalLock.lock();
+                if (runningTransactions.contains(trans_id)){
+                    //se depois de obter os locks a transação ainda está ativa (not aborted)
+                    synchronized (pendentPuts) {
+                        pendentPuts.put(trans_id, keys);
+                    }
+                    this.runningTransactionsGlobalLock.unlock();
+                    log.write(trans_id,keys);
+                    log.write(trans_id, Phase.PREPARED.toString());
+                    TwoPCProtocol.ControllerPreparedResp p = new TwoPCProtocol.ControllerPreparedResp(trans_id,myId);
+                    ms.sendAsync(address, TwoPCProtocol.ControllerPreparedResp.class.getName(),s.encode(p));
+                }else{
+                    //se ocorreu um abort
+                    this.runningTransactionsGlobalLock.unlock();
+                    releaseLocksAbort(keys);
+                }
+
 /*            } else {
                 log.write(trans_id, Phase.ROLLBACKED.toString());
                 TwoPCProtocol.ControllerAbortReq p = new TwoPCProtocol.ControllerAbortReq(trans_id,myId);
@@ -180,15 +228,27 @@ public class KeystoreSrv  {
     private void putTwoPC2(Address address, byte[] m) {
         TwoPCProtocol.ControllerCommitReq commitReq = s.decode(m);
         int trans_id = commitReq.txId;
-        if (!pendent_puts.containsKey(trans_id)){ // se estiver committed é porque não existe nos pendent_puts
+
+        Map<Long, byte[]> pendentKeys = null;
+        synchronized (pendentPuts){
+            pendentKeys = pendentPuts.remove(trans_id);
+        }
+        this.runningTransactionsGlobalLock.lock();
+        this.runningTransactions.remove(trans_id);
+        this.runningTransactionsGlobalLock.unlock();
+
+        if (pendentKeys == null){ // se estiver committed é porque não existe nos pendentPuts
             System.out.println("OO");
             TwoPCProtocol.ControllerCommitedResp p = new TwoPCProtocol.ControllerCommitedResp(trans_id,myId);
             ms.sendAsync(address, TwoPCProtocol.ControllerCommitedResp.class.getName(),s.encode(p));
         }
         else {
-            data.putAll(pendent_puts.get(trans_id));
-            releaseLocks(pendent_puts.get(trans_id));
-            pendent_puts.remove(trans_id);
+            synchronized (data) {
+                data.putAll(pendentKeys);
+            }
+
+            releaseLocks(pendentKeys);
+
             log.write(trans_id, Phase.COMMITED.toString());
             System.out.println("Transaction " + trans_id + " commited!!");
             TwoPCProtocol.ControllerCommitedResp p = new TwoPCProtocol.ControllerCommitedResp(trans_id,myId);
@@ -214,10 +274,16 @@ public class KeystoreSrv  {
     }
 
     private void releaseLocksAbort(Map<Long,byte[]> keys) {
+
         this.keyLocksGlobalLock.lock();
         for(Long keyId: keys.keySet()){
             keyLocks.get(keyId).unlock();
-            if(!data.containsKey(keyId)) keyLocks.remove(keyId);
+
+            boolean dataContainsKey;
+            synchronized (data) {
+                dataContainsKey = data.containsKey(keyId);
+            }
+            if(!dataContainsKey) keyLocks.remove(keyId);
         }
         this.keyLocksGlobalLock.unlock();
     }
