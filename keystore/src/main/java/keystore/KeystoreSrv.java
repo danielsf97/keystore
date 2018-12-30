@@ -157,7 +157,7 @@ public class KeystoreSrv  {
 
 
     private void get(Address address, byte[] m) {
-        System.out.println("PUT in keystore");
+        System.out.println("GET in keystore");
         TwoPCProtocol.GetControllerReq prepReq = s.decode(m);
         Collection<Long> keys = prepReq.keys;
         Map<Long,byte[]> rp = new HashMap<>();
@@ -193,10 +193,16 @@ public class KeystoreSrv  {
             TwoPCProtocol.ControllerAbortResp p = new TwoPCProtocol.ControllerAbortResp(trans_id,myId);
             ms.sendAsync(address, TwoPCProtocol.ControllerAbortResp.class.getName(),s.encode(p));
         }*/
+
         else { //se não está prepared
+
 /*            System.out.print("You prepared for transaction " + trans_id + "?");
             String line = sc.nextLine();
             if (line != null && line.equals("yes")) {*/
+                this.runningTransactionsGlobalLock.lock();
+                this.runningTransactions.add(trans_id);
+                this.runningTransactionsGlobalLock.unlock();
+
                 Map<Long, byte[]> keys =  prepReq.values;
                 getLocks(new TreeSet<Long>(keys.keySet()));
 
