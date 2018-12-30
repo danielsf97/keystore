@@ -88,19 +88,11 @@ class Transaction {
 
     void setParticipantStatus(Integer participant, Phase resp){
         System.out.println("CHANGING STATUS");
-        if (phase == Phase.STARTED){
-            participants_status.put(participant, resp);
-        }
-        else if (phase == Phase.PREPARED){
-            participants_status.put(participant,resp);
-        }
-        else if (phase == Phase.ABORT){
-            participants_status.put(participant,resp);
-        }
+        participants_status.put(participant, resp);
     }
 
 
-    boolean check_phase(Phase phase){
+    boolean checkParticipantsPhases(Phase phase){
         boolean status = true;
 
         for (Phase s: participants_status.values()){

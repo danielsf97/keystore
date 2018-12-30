@@ -23,7 +23,7 @@ public class Server {
     private static Serializer sp ;
     private Log<Object> log;
 
-    private HashMap<Integer, Transaction> currentTransactions;
+    private ConcurrentHashMap<Integer, Transaction> currentTransactions;
 
 
     private static AtomicInteger nextTxId;
@@ -47,7 +47,7 @@ public class Server {
 
 
 
-        this.currentTransactions = new HashMap<>();
+        this.currentTransactions = new ConcurrentHashMap<>();
         this.nextTxId =  new AtomicInteger(0);
 
         System.out.println("Size: " + currentTransactions.size());
@@ -98,11 +98,11 @@ public class Server {
         },es);
 
         ms.registerHandler(TwoPCProtocol.ControllerAbortReq.class.getName(),(o,m)->{
-            processAbort2(m);
+            processAbortReq(m);
         }, es);
 
         ms.registerHandler(TwoPCProtocol.ControllerAbortResp.class.getName(),(o,m)->{
-            processAbort(m);
+            processAbortResp(m);
         }, es);
 
         // this.coordinator = new Coordinator(this.ms, this.es, addresses);
@@ -111,8 +111,6 @@ public class Server {
         restore();
 
     }
-
-
 
 
     private void restore() {
@@ -173,12 +171,13 @@ public class Server {
 
 
 
-    private void processAbort2(byte[] m) {
+    private void processAbortReq(byte[] m) {
         TwoPCProtocol.ControllerAbortReq rp = sp.decode(m);
         Transaction e = currentTransactions.get(rp.txId);
-        e.setParticipantStatus(rp.pId, Phase.ROLLBACKED);
-        initAbort(e.getId());
-
+        synchronized (e) {
+            e.setParticipantStatus(rp.pId, Phase.ROLLBACKED);
+            initAbort(e.getId());
+        }
     }
 
 
@@ -190,10 +189,11 @@ public class Server {
         TwoPCProtocol.GetControllerResp rp = sp.decode(m);
         if (currentTransactions.containsKey(rp.txId)) {
             Transaction e = currentTransactions.get(rp.txId);
-            if (e.getParticipantStatus(rp.pId) != Phase.COMMITED)
+            if (e.getParticipantStatus(rp.pId) != Phase.COMMITED) {
                 e.setParticipantStatus(rp.pId, Phase.COMMITED);
-            e.setKeys(rp.values);
-            if (e.check_phase(Phase.COMMITED)) {
+                e.setKeys(rp.values);
+            }
+            if (e.checkParticipantsPhases(Phase.COMMITED)) {
                 e.setPhase(Phase.COMMITED);
                 KeystoreProtocol.GetResp p = new KeystoreProtocol.GetResp(e.getKeys(), e.get_client_txId());
                 ms.sendAsync(e.getAddress(),KeystoreProtocol.GetResp.class.getName(),s.encode(p));
@@ -294,17 +294,20 @@ public class Server {
     private synchronized void initAbort(int txId){
         Transaction e = currentTransactions.get(txId);
 
-        if (e.getPhase()!= Phase.ROLLBACKED){
-            log.write(txId,Phase.ABORT.toString());
-            e.setPhase(Phase.ABORT);
-            KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp(false, e.get_client_txId());
-            ms.sendAsync(e.getAddress(), KeystoreProtocol.PutResp.class.getName(), s.encode(p));
+        synchronized (e) {
 
-            String type = TwoPCProtocol.ControllerAbortReq.class.getName();
-            for ( Integer pId :e.getParticipants()){
-                TwoPCProtocol.ControllerAbortReq abortt = new TwoPCProtocol.ControllerAbortReq(txId,pId);
-                ms.sendAsync(addresses[pId], type ,sp.encode(abortt) );
-                send_iteractive2(pId,txId,abortt,type, Phase.ROLLBACKED);
+            if (e.getPhase() != Phase.ROLLBACKED) {
+                log.write(txId, Phase.ABORT.toString());
+                e.setPhase(Phase.ABORT);
+                KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp(false, e.get_client_txId());
+                ms.sendAsync(e.getAddress(), KeystoreProtocol.PutResp.class.getName(), s.encode(p));
+
+                String type = TwoPCProtocol.ControllerAbortReq.class.getName();
+                for (Integer pId : e.getParticipants()) {
+                    TwoPCProtocol.ControllerAbortReq abortt = new TwoPCProtocol.ControllerAbortReq(txId, pId);
+                    ms.sendAsync(addresses[pId], type, sp.encode(abortt));
+                    send_iteractive2(pId, txId, abortt, type, Phase.ROLLBACKED);
+                }
             }
         }
     }
@@ -319,9 +322,11 @@ public class Server {
         scheduler.schedule(()->{
             System.out.println("CHECKING");
             Transaction e = currentTransactions.get(txId);
-            if (e.getParticipantStatus(pId) == Phase.STARTED){
-                System.out.println("CHECKING ABORT");
-                initAbort(txId);
+            synchronized(e) {
+                if (e.getParticipantStatus(pId) == Phase.STARTED) {
+                    System.out.println("CHECKING ABORT");
+                    initAbort(txId);
+                }
             }
         }, 15, TimeUnit.SECONDS);
     }
@@ -336,31 +341,38 @@ public class Server {
         scheduler.scheduleAtFixedRate(()->{
             System.out.println("CHECKING2 " + phase.toString());
             Transaction e = currentTransactions.get(txId);
-            if (e.getParticipantStatus(pId) == phase){
-                scheduler.shutdown();
+
+            synchronized(e){
+                if (e.getParticipantStatus(pId) == phase){
+                    scheduler.shutdown();
+                }
+                else{
+                    ms.sendAsync(addresses[pId],
+                            type,
+                            sp.encode(contReq));
+                }
             }
-            else{
-                ms.sendAsync(addresses[pId],
-                        type,
-                        sp.encode(contReq));
-            }
+
         }, 0, 5, TimeUnit.SECONDS);
     }
 
     private void processTPC1(byte[] m) {
         TwoPCProtocol.ControllerPreparedResp rp = sp.decode(m);
         Transaction e = currentTransactions.get(rp.txId);
-        if (e.getPhase()!=Phase.ABORT){
-            if (e.getParticipantStatus(rp.pId) != Phase.PREPARED){
-                System.out.println("Init Commit: " + rp.pId);
-                e.setParticipantStatus(rp.pId, Phase.PREPARED);
-                if (e.check_phase(Phase.PREPARED)){
-                    e.setPhase(Phase.PREPARED);
-                    log.write(rp.txId,Phase.PREPARED.toString());
-                    KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp(true, e.get_client_txId());
-                    ms.sendAsync(e.getAddress(), KeystoreProtocol.PutResp.class.getName(), s.encode(p));
-                    System.out.println("Init Commit");
-                    initTPC2(e);
+
+        synchronized(e){
+            if (e.getPhase() != Phase.ABORT){
+                if (e.getParticipantStatus(rp.pId) != Phase.PREPARED){
+                    System.out.println("Init Commit: " + rp.pId);
+                    e.setParticipantStatus(rp.pId, Phase.PREPARED);
+                    if (e.checkParticipantsPhases(Phase.PREPARED)){
+                        e.setPhase(Phase.PREPARED);
+                        log.write(rp.txId,Phase.PREPARED.toString());
+                        KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp(true, e.get_client_txId());
+                        ms.sendAsync(e.getAddress(), KeystoreProtocol.PutResp.class.getName(), s.encode(p));
+                        System.out.println("Init Commit");
+                        initTPC2(e);
+                    }
                 }
             }
         }
@@ -371,36 +383,43 @@ public class Server {
         TwoPCProtocol.ControllerCommitedResp rp = sp.decode(m);
         if (currentTransactions.containsKey(rp.txId)) {
             Transaction e = currentTransactions.get(rp.txId);
-            if (e.getPhase() != Phase.ABORT) {
-                if (e.getParticipantStatus(rp.pId) != Phase.COMMITED) {
-                    e.setParticipantStatus(rp.pId, Phase.COMMITED);
-                    if (e.check_phase(Phase.COMMITED)) {
-                        e.setPhase(Phase.COMMITED);
-                        log.write(rp.txId, Phase.COMMITED.toString());
-                        currentTransactions.remove(rp.txId);
-                        System.out.println("Done");
+
+            synchronized (e) {
+                if (e.getPhase() != Phase.ABORT) {
+                    if (e.getParticipantStatus(rp.pId) != Phase.COMMITED) {
+                        e.setParticipantStatus(rp.pId, Phase.COMMITED);
+                        if (e.checkParticipantsPhases(Phase.COMMITED)) {
+                            e.setPhase(Phase.COMMITED);
+                            log.write(rp.txId, Phase.COMMITED.toString());
+                            currentTransactions.remove(rp.txId);
+                            System.out.println("Done");
+                        }
                     }
                 }
             }
         }
     }
 
-    private void processAbort(byte[] bytes) {
+    private void processAbortResp(byte[] bytes) {
         TwoPCProtocol.ControllerAbortResp rp = sp.decode(bytes);
         if (currentTransactions.containsKey(rp.txId)) {
             Transaction e = currentTransactions.get(rp.txId);
-            if (e.getPhase() != Phase.ROLLBACKED) {
-                System.out.println("FASE1:" + e.getParticipantStatus(rp.pId).toString());
-                if (e.getParticipantStatus(rp.pId) != Phase.ROLLBACKED) {
-                    e.setParticipantStatus(rp.pId, Phase.ROLLBACKED);
-                    System.out.println("FASE2:" + e.getParticipantStatus(rp.pId).toString());
-                    if (e.check_phase(Phase.ROLLBACKED)) {
-                        currentTransactions.remove(rp.txId);
-                        System.out.println("All prepared for tx:" + e.getId());
-                        e.setPhase(Phase.ROLLBACKED);
-                        log.write(rp.txId, Phase.ROLLBACKED.toString());
 
-                        System.out.println("ABOOOOOOOOOOORRRTTTTTTTTTTTEEDDD");
+            synchronized (e) {
+
+                if (e.getPhase() != Phase.ROLLBACKED) {
+                    System.out.println("FASE1:" + e.getParticipantStatus(rp.pId).toString());
+                    if (e.getParticipantStatus(rp.pId) != Phase.ROLLBACKED) {
+                        e.setParticipantStatus(rp.pId, Phase.ROLLBACKED);
+                        System.out.println("FASE2:" + e.getParticipantStatus(rp.pId).toString());
+                        if (e.checkParticipantsPhases(Phase.ROLLBACKED)) {
+                            currentTransactions.remove(rp.txId);
+                            System.out.println("All prepared for tx:" + e.getId());
+                            e.setPhase(Phase.ROLLBACKED);
+                            log.write(rp.txId, Phase.ROLLBACKED.toString());
+
+                            System.out.println("ABOOOOOOOOOOORRRTTTTTTTTTTTEEDDD");
+                        }
                     }
                 }
             }
