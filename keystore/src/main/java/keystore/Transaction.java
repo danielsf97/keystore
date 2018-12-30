@@ -5,6 +5,7 @@ import io.atomix.utils.net.Address;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 
 class Transaction {
 
@@ -17,6 +18,7 @@ class Transaction {
     private Phase phase;
     private Integer client_txId;
     private Address address;
+    private ReentrantLock lock;
 
 
     Transaction(Integer id, Integer client_txId,Address address){
@@ -27,6 +29,7 @@ class Transaction {
         this.address = address;
         this.participants_status = new HashMap<>();
         keys = new HashMap<>();
+        this.lock = new ReentrantLock();
 
     }
 
@@ -37,6 +40,7 @@ class Transaction {
         this.participants = tx.participantsToKeys.keySet();
         this.participants_status = new HashMap<>();
         this.phase = phase;
+        this.lock = new ReentrantLock();
         for(Integer p : participants){
             participants_status.put(p, phase);
         }
@@ -101,6 +105,14 @@ class Transaction {
         }
 
         return status;
+    }
+
+    public void lock(){
+        this.lock.lock();
+    }
+
+    public void unlock(){
+        this.lock.unlock();
     }
 
 

@@ -8,6 +8,7 @@ import io.atomix.utils.serializer.Serializer;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class Server {
 
@@ -23,8 +24,8 @@ public class Server {
     private static Serializer sp ;
     private Log<Object> log;
 
-    private ConcurrentHashMap<Integer, Transaction> currentTransactions;
-
+    private HashMap<Integer, Transaction> currentTransactions;
+    private ReentrantLock currentTransactionsGlobalLock;
 
     private static AtomicInteger nextTxId;
 
@@ -47,10 +48,13 @@ public class Server {
 
 
 
-        this.currentTransactions = new ConcurrentHashMap<>();
+        this.currentTransactions = new HashMap<>();
+        this.currentTransactionsGlobalLock = new ReentrantLock();
         this.nextTxId =  new AtomicInteger(0);
 
         System.out.println("Size: " + currentTransactions.size());
+
+        restore();
 
         ms.registerHandler("put", (c, m) -> {
             System.out.println("HELLOOOOOO FROM SERVER");
@@ -59,7 +63,10 @@ public class Server {
             //AQUI O CENAS NÂO ESTÀ A 0 NO INICIO
             int txId = nextTxId.incrementAndGet();
             Transaction trans = new Transaction(txId,req.txId,c);
+
+            this.currentTransactionsGlobalLock.lock();
             currentTransactions.put(txId, trans);
+            this.currentTransactionsGlobalLock.unlock();
 
             processPutReq(trans, req);
 
@@ -78,7 +85,10 @@ public class Server {
             //AQUI O CENAS NÂO ESTÀ A 0 NO INICIO
             int txId = nextTxId.incrementAndGet();
             Transaction trans = new Transaction(txId,req.txId, c);
+
+            this.currentTransactionsGlobalLock.lock();
             currentTransactions.put(txId, trans);
+            this.currentTransactionsGlobalLock.unlock();
 
             processGetReq(trans,req);
 
@@ -108,7 +118,6 @@ public class Server {
         // this.coordinator = new Coordinator(this.ms, this.es, addresses);
 
         ms.start();
-        restore();
 
     }
 
@@ -173,11 +182,15 @@ public class Server {
 
     private void processAbortReq(byte[] m) {
         TwoPCProtocol.ControllerAbortReq rp = sp.decode(m);
+
+        this.currentTransactionsGlobalLock.lock();
         Transaction e = currentTransactions.get(rp.txId);
-        synchronized (e) {
-            e.setParticipantStatus(rp.pId, Phase.ROLLBACKED);
-            initAbort(e.getId());
-        }
+        this.currentTransactionsGlobalLock.unlock();
+
+        e.lock();
+        e.setParticipantStatus(rp.pId, Phase.ROLLBACKED);
+        initAbort(e.getId());
+        e.unlock();
     }
 
 
@@ -187,17 +200,28 @@ public class Server {
 
     private void processGetResp(byte[] m) {
         TwoPCProtocol.GetControllerResp rp = sp.decode(m);
-        if (currentTransactions.containsKey(rp.txId)) {
-            Transaction e = currentTransactions.get(rp.txId);
+
+        currentTransactionsGlobalLock.lock();
+        Transaction e = currentTransactions.get(rp.txId);
+        currentTransactionsGlobalLock.unlock();
+
+        if (e != null) {
+            e.lock();
             if (e.getParticipantStatus(rp.pId) != Phase.COMMITED) {
                 e.setParticipantStatus(rp.pId, Phase.COMMITED);
                 e.setKeys(rp.values);
             }
             if (e.checkParticipantsPhases(Phase.COMMITED)) {
                 e.setPhase(Phase.COMMITED);
+                e.unlock();
                 KeystoreProtocol.GetResp p = new KeystoreProtocol.GetResp(e.getKeys(), e.get_client_txId());
                 ms.sendAsync(e.getAddress(),KeystoreProtocol.GetResp.class.getName(),s.encode(p));
+
+                currentTransactionsGlobalLock.lock();
                 currentTransactions.remove(rp.txId);
+                currentTransactionsGlobalLock.unlock();
+            }else{
+                e.unlock();
             }
         }
     }
@@ -292,23 +316,30 @@ public class Server {
     }
 
     private synchronized void initAbort(int txId){
+
+        currentTransactionsGlobalLock.lock();
         Transaction e = currentTransactions.get(txId);
+        currentTransactionsGlobalLock.unlock();
 
-        synchronized (e) {
+        e.lock();
+        if (e.getPhase() != Phase.ROLLBACKED && e.getPhase() != Phase.ABORT) {
 
-            if (e.getPhase() != Phase.ROLLBACKED) {
-                log.write(txId, Phase.ABORT.toString());
-                e.setPhase(Phase.ABORT);
-                KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp(false, e.get_client_txId());
-                ms.sendAsync(e.getAddress(), KeystoreProtocol.PutResp.class.getName(), s.encode(p));
+            e.setPhase(Phase.ABORT);
+            e.unlock();
 
-                String type = TwoPCProtocol.ControllerAbortReq.class.getName();
-                for (Integer pId : e.getParticipants()) {
-                    TwoPCProtocol.ControllerAbortReq abortt = new TwoPCProtocol.ControllerAbortReq(txId, pId);
-                    ms.sendAsync(addresses[pId], type, sp.encode(abortt));
-                    send_iteractive2(pId, txId, abortt, type, Phase.ROLLBACKED);
-                }
+            log.write(txId, Phase.ABORT.toString());
+
+            KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp(false, e.get_client_txId());
+            ms.sendAsync(e.getAddress(), KeystoreProtocol.PutResp.class.getName(), s.encode(p));
+
+            String type = TwoPCProtocol.ControllerAbortReq.class.getName();
+            for (Integer pId : e.getParticipants()) {
+                TwoPCProtocol.ControllerAbortReq abortt = new TwoPCProtocol.ControllerAbortReq(txId, pId);
+                ms.sendAsync(addresses[pId], type, sp.encode(abortt));
+                send_iteractive2(pId, txId, abortt, type, Phase.ROLLBACKED);
             }
+        }else{
+            e.unlock();
         }
     }
 
@@ -321,13 +352,18 @@ public class Server {
         ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
         scheduler.schedule(()->{
             System.out.println("CHECKING");
+            currentTransactionsGlobalLock.lock();
             Transaction e = currentTransactions.get(txId);
-            synchronized(e) {
-                if (e.getParticipantStatus(pId) == Phase.STARTED) {
-                    System.out.println("CHECKING ABORT");
-                    initAbort(txId);
-                }
+            currentTransactionsGlobalLock.unlock();
+
+            e.lock();
+            if (e.getParticipantStatus(pId) == Phase.STARTED) {
+                System.out.println("CHECKING ABORT");
+                e.unlock();
+
+                initAbort(txId);
             }
+            else e.unlock();
         }, 15, TimeUnit.SECONDS);
     }
 
@@ -340,89 +376,115 @@ public class Server {
         ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
         scheduler.scheduleAtFixedRate(()->{
             System.out.println("CHECKING2 " + phase.toString());
-            Transaction e = currentTransactions.get(txId);
 
-            synchronized(e){
-                if (e.getParticipantStatus(pId) == phase){
-                    scheduler.shutdown();
-                }
-                else{
-                    ms.sendAsync(addresses[pId],
-                            type,
-                            sp.encode(contReq));
-                }
+            currentTransactionsGlobalLock.lock();
+            Transaction e = currentTransactions.get(txId);
+            currentTransactionsGlobalLock.unlock();
+
+            e.lock();
+            if (e.getParticipantStatus(pId) == phase){
+                e.unlock();
+                scheduler.shutdown();
             }
+            else{
+                e.unlock();
+                ms.sendAsync(addresses[pId],
+                        type,
+                        sp.encode(contReq));
+            }
+
 
         }, 0, 5, TimeUnit.SECONDS);
     }
 
     private void processTPC1(byte[] m) {
         TwoPCProtocol.ControllerPreparedResp rp = sp.decode(m);
-        Transaction e = currentTransactions.get(rp.txId);
 
-        synchronized(e){
-            if (e.getPhase() != Phase.ABORT){
-                if (e.getParticipantStatus(rp.pId) != Phase.PREPARED){
-                    System.out.println("Init Commit: " + rp.pId);
-                    e.setParticipantStatus(rp.pId, Phase.PREPARED);
-                    if (e.checkParticipantsPhases(Phase.PREPARED)){
-                        e.setPhase(Phase.PREPARED);
-                        log.write(rp.txId,Phase.PREPARED.toString());
-                        KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp(true, e.get_client_txId());
-                        ms.sendAsync(e.getAddress(), KeystoreProtocol.PutResp.class.getName(), s.encode(p));
-                        System.out.println("Init Commit");
-                        initTPC2(e);
-                    }
-                }
-            }
-        }
+        this.currentTransactionsGlobalLock.lock();
+        Transaction e = currentTransactions.get(rp.txId);
+        this.currentTransactionsGlobalLock.unlock();
+
+        e.lock();
+        if (e.getPhase() != Phase.ABORT){
+            System.out.println("Init Commit: " + rp.pId);
+            e.setParticipantStatus(rp.pId, Phase.PREPARED);
+            if (e.checkParticipantsPhases(Phase.PREPARED)){
+                e.setPhase(Phase.PREPARED);
+                e.unlock();
+
+                log.write(rp.txId,Phase.PREPARED.toString());
+                KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp(true, e.get_client_txId());
+                ms.sendAsync(e.getAddress(), KeystoreProtocol.PutResp.class.getName(), s.encode(p));
+                System.out.println("Init Commit");
+                initTPC2(e);
+            }else e.unlock();
+        }else e.unlock();
+
     }
 
     private void processTPC2(byte[] m){
         System.out.println("A acabar");
         TwoPCProtocol.ControllerCommitedResp rp = sp.decode(m);
-        if (currentTransactions.containsKey(rp.txId)) {
-            Transaction e = currentTransactions.get(rp.txId);
 
-            synchronized (e) {
-                if (e.getPhase() != Phase.ABORT) {
-                    if (e.getParticipantStatus(rp.pId) != Phase.COMMITED) {
-                        e.setParticipantStatus(rp.pId, Phase.COMMITED);
-                        if (e.checkParticipantsPhases(Phase.COMMITED)) {
-                            e.setPhase(Phase.COMMITED);
-                            log.write(rp.txId, Phase.COMMITED.toString());
-                            currentTransactions.remove(rp.txId);
-                            System.out.println("Done");
-                        }
-                    }
-                }
-            }
+        this.currentTransactionsGlobalLock.lock();
+        if (currentTransactions.containsKey(rp.txId)) {
+
+            Transaction e = currentTransactions.get(rp.txId);
+            this.currentTransactionsGlobalLock.unlock();
+
+            e.lock();
+            if (e.getPhase() != Phase.ABORT) {
+                e.setParticipantStatus(rp.pId, Phase.COMMITED);
+                if (e.checkParticipantsPhases(Phase.COMMITED)) {
+                    e.setPhase(Phase.COMMITED);
+                    e.unlock();
+
+                    this.currentTransactionsGlobalLock.lock();
+                    currentTransactions.remove(rp.txId);
+                    this.currentTransactionsGlobalLock.unlock();
+
+                    log.write(rp.txId, Phase.COMMITED.toString());
+                    System.out.println("Done");
+                }else e.unlock();
+            }else e.unlock();
+
+        }else{
+            this.currentTransactionsGlobalLock.unlock();
         }
     }
 
     private void processAbortResp(byte[] bytes) {
         TwoPCProtocol.ControllerAbortResp rp = sp.decode(bytes);
+
+        this.currentTransactionsGlobalLock.lock();
         if (currentTransactions.containsKey(rp.txId)) {
+
             Transaction e = currentTransactions.get(rp.txId);
+            this.currentTransactionsGlobalLock.unlock();
 
-            synchronized (e) {
+            e.lock();
 
-                if (e.getPhase() != Phase.ROLLBACKED) {
-                    System.out.println("FASE1:" + e.getParticipantStatus(rp.pId).toString());
-                    if (e.getParticipantStatus(rp.pId) != Phase.ROLLBACKED) {
-                        e.setParticipantStatus(rp.pId, Phase.ROLLBACKED);
-                        System.out.println("FASE2:" + e.getParticipantStatus(rp.pId).toString());
-                        if (e.checkParticipantsPhases(Phase.ROLLBACKED)) {
-                            currentTransactions.remove(rp.txId);
-                            System.out.println("All prepared for tx:" + e.getId());
-                            e.setPhase(Phase.ROLLBACKED);
-                            log.write(rp.txId, Phase.ROLLBACKED.toString());
+            if (e.getPhase() != Phase.ROLLBACKED) {
+                System.out.println("FASE1:" + e.getParticipantStatus(rp.pId).toString());
+                e.setParticipantStatus(rp.pId, Phase.ROLLBACKED);
+                System.out.println("FASE2:" + e.getParticipantStatus(rp.pId).toString());
+                if (e.checkParticipantsPhases(Phase.ROLLBACKED)) {
+                    e.setPhase(Phase.ROLLBACKED);
+                    e.unlock();
 
-                            System.out.println("ABOOOOOOOOOOORRRTTTTTTTTTTTEEDDD");
-                        }
-                    }
-                }
-            }
+                    this.currentTransactionsGlobalLock.lock();
+                    currentTransactions.remove(rp.txId);
+                    this.currentTransactionsGlobalLock.unlock();
+                    System.out.println("All prepared for tx:" + e.getId());
+
+                    log.write(rp.txId, Phase.ROLLBACKED.toString());
+
+                    System.out.println("ABOOOOOOOOOOORRRTTTTTTTTTTTEEDDD");
+                }else e.unlock();
+            }else e.unlock();
+
+        }else{
+            this.currentTransactionsGlobalLock.unlock();
         }
     }
 
