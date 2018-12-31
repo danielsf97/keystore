@@ -3,45 +3,109 @@ package keystore;
 import io.atomix.storage.journal.SegmentedJournal;
 import io.atomix.storage.journal.SegmentedJournalReader;
 import io.atomix.storage.journal.SegmentedJournalWriter;
-import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Serializer;
 
-import java.net.Inet4Address;
 
+/**
+ * Representa um log.
+ *
+ * @param <T> TIpo de entrada no log
+ */
 public class Log<T> {
 
-
+    /**
+     * Representa uma entrada no log.
+     *
+     * @param <T>   Tipo de entrada no log.
+     */
     public static class LogEntry<T> {
+
+
+        // **********************************************************************
+        // Variáveis
+        // **********************************************************************
+
         private int trans_id;
         private T action;
 
+
+        // **********************************************************************
+        // Construtores
+        // **********************************************************************
+
+        /**
+         * Construtor parametrizado de uma entrada no log.
+         *
+         * @param trans_id      ID da entrada.
+         * @param action        Conteúdo da entrada.
+         */
         public LogEntry(int trans_id, T action) {
-            this.trans_id=trans_id;
-            this.action = action; //os participantes no coord e chaves nos participantes
+            this.trans_id = trans_id;
+            this.action = action;
 
         }
 
 /*       public void setPhase(Phase phase){
             this.phase = phase;
         }*/
-        public String toString() {
-            return "xid="+trans_id+" "+action;
-        }
 
-        public int getTrans_id(){
+        // **********************************************************************
+        // Getters e setters
+        // **********************************************************************
+
+        /**
+         * Retorna o ID de uma entrada.
+         *
+         * @return  o ID de uma entrada.
+         */
+        public int getTrans_id() {
             return trans_id;
         }
 
-        public T getAction(){
+        /**
+         * Retorna o conteúdo de uma entrada.
+         *
+         * @return o conteúdo de uma entrada.
+         */
+        public T getAction() {
             return action;
         }
 
+        // **********************************************************************
+        // Métodos públicos
+        // **********************************************************************
+
+
+        /**
+         * Constrói a representação textual de uma entrada no log.
+         *
+         * @return a representação textual de uma entrada no log.
+         */
+        public String toString() {
+            return "xid=" + trans_id + " " + action;
+        }
+
     }
+
+
+    // **************************************************************************
+    // Variáveis
+    // **************************************************************************
 
     private Serializer s;
     private SegmentedJournal<Object> j;
     private SegmentedJournalWriter<Object> w;
 
+
+    // **************************************************************************
+    // Construtores
+    // **************************************************************************
+
+    /**
+     * Construtor parametrizado do log.
+     *
+     * @param name Nome do log.
+     */
     public Log(String name) {
         this.s = Serializer.builder()
                 .withTypes(Log.LogEntry.class)
@@ -54,15 +118,30 @@ public class Log<T> {
                 .build();
 
         this.w = j.writer();
-
-
     }
 
-    public long last_index(){
+
+    // **************************************************************************
+    // Métodos públicos
+    // **************************************************************************
+
+    /**
+     * Retorna o último indíce escrito no log.
+     *
+     * @return o último indíce escrito no log.
+     */
+    public long last_index() {
         System.out.println(w.getLastIndex());
         return w.getLastIndex();
     }
 
+
+    /**
+     * Escreve no log.
+     *
+     * @param transId   Identificador da entrada.
+     * @param action    Conteúdo da entrada no log.
+     */
     public void write(int transId, T action) {
         w = j.writer();
         w.append(new Log.LogEntry<Object>(transId, action));
@@ -78,7 +157,14 @@ public class Log<T> {
         }
     }
 
-    public Log.LogEntry read(int index){
+
+    /**
+     * Lê uma entrada no log localizada num dado índice.
+     *
+     * @param index     Índice onde se pretende ler a entrada.
+     * @return          Entrada localizada no indíce dado.
+     */
+    public Log.LogEntry read(int index) {
         SegmentedJournalReader<Object> r = j.openReader(index);
         if (r.hasNext()) return (Log.LogEntry) r.next().entry();
         return null;

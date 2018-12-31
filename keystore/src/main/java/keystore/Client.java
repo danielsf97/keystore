@@ -1,14 +1,28 @@
 package keystore;
 
-
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+
+/**
+ * O programa Client é usado para teste do sistema distribuído de
+ * armazenamento de pares chave-valor, sendo responsável
+ * por usar as operações providenciadas pelo servidor de get e put
+ * das mesmas.
+ *
+ */
 public class Client {
 
 
-
+    /**
+     * Usa as operações de get e put de pares chaves-valor, após
+     * conexão ao servidor.
+     *
+     * @param args          Um array de strings contendo os argumentos
+     *                      da linha de comandos do programa.
+     * @throws Exception    TODO:
+     */
     public static void main(String[] args) throws Exception {
 
 
