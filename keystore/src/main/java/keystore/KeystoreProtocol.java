@@ -5,7 +5,19 @@ import io.atomix.utils.serializer.Serializer;
 import java.util.Collection;
 import java.util.Map;
 
+
+/**
+ * Define as mensagens utilizadas na comunicação dos clientes com o servidor
+ * (pedidos e respostas PUT/GET) e permite criar um serializer para as classes definidas
+ *
+ */
 public class KeystoreProtocol {
+
+    /**
+     * Cria um Serializador para as mensagens entre Cliente e Servidor
+     *
+     * @return              Serializer das mensagens Cliente-Servidor
+     */
     public static Serializer newSerializer() {
         return Serializer.builder()
                 .withTypes(
@@ -16,7 +28,11 @@ public class KeystoreProtocol {
                 .build();
     }
 
-
+    /**
+     * Representa o formato de serialização das mensagens referentes aos pedidos
+     * put do cliente para o servidor
+     *
+     */
     public static class PutReq {
         int txId;
         Map<Long,byte[]> values;
@@ -26,6 +42,11 @@ public class KeystoreProtocol {
         }
     }
 
+    /**
+     * Representa o formato de serialização das mensagens referentes às respostas
+     * dos pedidos put do servidor para o cliente
+     *
+     */
     public static class PutResp {
         int txId;
         boolean state;
@@ -34,6 +55,11 @@ public class KeystoreProtocol {
         }
     }
 
+    /**
+     * Representa o formato de serialização das mensagens referentes aos pedidos
+     * get do cliente para o servidor
+     *
+     */
     public static class GetReq {
         int txId;
         Collection<Long> keys;
@@ -43,6 +69,11 @@ public class KeystoreProtocol {
         }
     }
 
+    /**
+     * Representa o formato de serialização das mensagens referentes às respostas
+     * dos pedidos get do servidor para o cliente
+     *
+     */
     public static class GetResp {
         int txId;
         Map<Long, byte[]> values;
