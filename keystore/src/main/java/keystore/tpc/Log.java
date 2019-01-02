@@ -1,9 +1,12 @@
-package keystore;
+package keystore.tpc;
 
 import io.atomix.storage.journal.SegmentedJournal;
 import io.atomix.storage.journal.SegmentedJournalReader;
 import io.atomix.storage.journal.SegmentedJournalWriter;
 import io.atomix.utils.serializer.Serializer;
+
+import java.util.ArrayList;
+import java.util.List;
 
 
 /**
@@ -109,8 +112,9 @@ public class Log<T> {
     public Log(String name) {
         this.s = Serializer.builder()
                 .withTypes(Log.LogEntry.class)
-                .withTypes(SimpleTransaction.class)
+                .withTypes(SimpleTwoPCTransaction.class)
                 .build();
+
 
         this.j = SegmentedJournal.builder()
                 .withName(name)
@@ -119,6 +123,7 @@ public class Log<T> {
 
         this.w = j.writer();
     }
+
 
 
     // **************************************************************************
@@ -149,68 +154,21 @@ public class Log<T> {
       //  w.close();
 
     }
-    public void read(){
+
+    /**
+     * Lê o log.
+     *
+     * @return          Lista de entradas do log.
+     */
+    public List<LogEntry> read(){
+        List<LogEntry> entries = new ArrayList<>();
         SegmentedJournalReader<Object> r = j.openReader(0);
         while(r.hasNext()) {
             Log.LogEntry e = (Log.LogEntry) r.next().entry();
-            System.out.println(e.toString());
+            entries.add(e);
         }
+        return entries;
     }
 
 
-    /**
-     * Lê uma entrada no log localizada num dado índice.
-     *
-     * @param index     Índice onde se pretende ler a entrada.
-     * @return          Entrada localizada no indíce dado.
-     */
-    public Log.LogEntry read(int index) {
-        SegmentedJournalReader<Object> r = j.openReader(index);
-        if (r.hasNext()) return (Log.LogEntry) r.next().entry();
-        return null;
-    }
-
-
-
-
-    public boolean actionAlreadyExists(int trans_id, Phase ac) {
-        boolean exists = false;
-        SegmentedJournalReader<Object> r = j.openReader(0);
-        String action = ac.toString();
-        System.out.println("Verificar existência de ação: " + trans_id + " -> " + action);
-        while(r.hasNext() && !exists) {
-            Log.LogEntry e = (Log.LogEntry) r.next().entry();
-            System.out.println(r.getCurrentIndex() +  e.trans_id + " -> " + e.action);
-            if(e.trans_id == trans_id && action.equals(e.action)) exists = true;
-        }
-        System.out.println("Returned " + exists);
-        return exists;
-    }
-
-
-
-//    public static void main(String[] args) {
-//        Serializer s = Serializer.builder()
-//                .withTypes(LogEntry.class)
-//                .build();
-//
-//        SegmentedJournal<Object> j = SegmentedJournal.builder()
-//                .withName("exemplo")
-//                .withSerializer(s)
-//                .build();
-//
-//        int xid = 0;
-//
-//        SegmentedJournalReader<Object> r = j.openReader(0);
-//        while(r.hasNext()) {
-//            LogEntry e = (LogEntry) r.next().entry();
-//            System.out.println(e.toString());
-//            xid = e.xid;
-//        }
-//
-//        SegmentedJournalWriter<Object> w = j.writer();
-//        w.append(new LogEntry(xid+1, "hello world"));
-//        w.flush();
-//        w.close();
-//    }
 }

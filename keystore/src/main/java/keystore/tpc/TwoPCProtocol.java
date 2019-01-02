@@ -1,35 +1,30 @@
-package keystore;
+package keystore.tpc;
 
 import io.atomix.utils.serializer.Serializer;
-
-import java.util.Collection;
-import java.util.Map;
 
 /**
  * Define as mensagens utilizadas no protocolo Two-Phase Commit,
  * entre Coordenador e Participantes das transações
  *
  */
-public class TwoPCProtocol {
+public class TwoPCProtocol{
 
     /**
      * Cria um Serializador para as mensagens do protocolo 2PC
      *
      * @return              Serializer das mensagens do protocolo 2PC
      */
+
     public static Serializer newSerializer() {
         return Serializer.builder()
                 .withTypes(
-                        TwoPCProtocol.ControllerPreparedResp.class,
-                        TwoPCProtocol.ControllerPreparedReq.class,
-                        ControllerCommitReq.class,
-                        ControllerCommitedResp.class,
-                        GetControllerReq.class,
-                        GetControllerResp.class,
-                        TwoPCProtocol.ControllerAbortReq.class,
-                        ControllerReq.class,
                         TwoPCProtocol.ControllerReq.class,
+                        TwoPCProtocol.ControllerPreparedReq.class,
+                        TwoPCProtocol.ControllerCommitReq.class,
                         TwoPCProtocol.ControllerAbortReq.class,
+                        TwoPCProtocol.ControllerResp.class,
+                        TwoPCProtocol.ControllerPreparedResp.class,
+                        TwoPCProtocol.ControllerCommittedResp.class,
                         TwoPCProtocol.ControllerAbortResp.class
                         )
                 .build();
@@ -54,9 +49,9 @@ public class TwoPCProtocol {
      * de Prepared, do coordenador para os participantes
      *
      */
-    public static class ControllerPreparedReq extends ControllerReq{
-        public Map<Long,byte[]> values;
-        public ControllerPreparedReq(int txId, int pId, Map<Long,byte[]> values){
+    public static class ControllerPreparedReq <T> extends ControllerReq{
+        public T values;
+        public ControllerPreparedReq(int txId, int pId, T values){
             super(txId,pId);
             this.values = values;
         }
@@ -114,8 +109,8 @@ public class TwoPCProtocol {
      * aos pedidos de Commit da transação, dos participantes para o coordenador
      *
      */
-    public static class ControllerCommitedResp extends ControllerResp{
-        public ControllerCommitedResp(int txId, int pId){
+    public static class ControllerCommittedResp extends ControllerResp{
+        public ControllerCommittedResp(int txId, int pId){
             super(txId,pId);
         }
     }
@@ -128,39 +123,6 @@ public class TwoPCProtocol {
     public static class ControllerAbortResp extends ControllerResp{
         public ControllerAbortResp(int txId, int pId){
             super(txId,pId);
-        }
-    }
-
-
-    /**
-     * Representa o formato de serialização das mensagens utilizado nos pedidos
-     * get do servidor principal para os servidores de chaves
-     *
-     */
-    public static class GetControllerReq {
-        public int txId;
-        public int pId;
-        public Collection<Long> keys;
-        public GetControllerReq(int txId, int pId, Collection<Long> keys){
-            this.txId = txId;
-            this.pId = pId;
-            this.keys = keys;
-        }
-    }
-
-    /**
-     * Representa o formato de serialização das mensagens utilizado nas respostas
-     * aos pedidos get dos servidores de chaves para o servidor principal
-     *
-     */
-    public static class GetControllerResp {
-        public int txId;
-        public int pId;
-        public Map <Long, byte[]> values;
-        public GetControllerResp(int txId, int pId, Map <Long, byte[]> values){
-            this.txId = txId;
-            this.pId = pId;
-            this.values = values;
         }
     }
 

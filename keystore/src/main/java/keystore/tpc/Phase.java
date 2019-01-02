@@ -1,4 +1,4 @@
-package keystore;
+package keystore.tpc;
 
 
 /**
@@ -6,5 +6,5 @@ package keystore;
  *
  */
 public enum Phase {
-    STARTED, PREPARED, COMMITED, ABORT, ROLLBACKED
+    STARTED, PREPARED, COMMITTED, ABORT, ROLLBACKED
 }

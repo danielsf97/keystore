@@ -1,6 +1,7 @@
-package keystore;
+package keystore.tpc;
 
 import io.atomix.utils.net.Address;
+
 import java.util.Map;
 
 /**
@@ -8,11 +9,11 @@ import java.util.Map;
  * a inserir no log do Servidor/Coordenador
  *
  */
-public class SimpleTransaction {
+class SimpleTwoPCTransaction<T> {
     Integer id;
     Integer clientId;
     Integer clientAddress;
-    Map<Integer, Map<Long,byte[]>> participantsToKeys;
+    Map<Integer, T> participantsToT;
 
     /**
      * Construtor parametrizado para o SimpleTransaction.
@@ -22,14 +23,11 @@ public class SimpleTransaction {
      * @param clientAddress         Endereço do cliente
      * @param participantsToKeys    Mapa de associação dos servidores particiantes e chaves a armazenar
      */
-    public SimpleTransaction(Integer id, Integer  clientId, Address  clientAddress, Map<Integer, Map<Long,byte[]>>  participantsToKeys){
+    SimpleTwoPCTransaction(Integer id, Integer clientId, Address clientAddress, Map<Integer, T> participantsToT){
         this.id = id;
         this.clientId = clientId;
         this.clientAddress = clientAddress.port();
-        this.participantsToKeys = participantsToKeys;
+        this.participantsToT = participantsToT;
     }
-
-
-
 
 }
