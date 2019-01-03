@@ -1,4 +1,4 @@
-package keystore.tpc;
+package tpc;
 
 
 import io.atomix.cluster.messaging.ManagedMessagingService;
@@ -165,6 +165,11 @@ public class Coordinator<T> {
 
 
                 System.out.println("Init Commit");
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e1) {
+                    e1.printStackTrace();
+                }
                 initTPC2(e);
             }else e.unlock();
         }else e.unlock();
