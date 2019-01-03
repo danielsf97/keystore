@@ -135,7 +135,7 @@ public class Log<T> {
      * @param transId   Identificador da entrada.
      * @param action    Conteúdo da entrada no log.
      */
-    public void write(int transId, T action) {
+    public synchronized void write(int transId, T action) {
         w = j.writer();
         w.append(new Log.LogEntry<Object>(transId, action));
         w.flush();

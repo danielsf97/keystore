@@ -96,14 +96,16 @@ public class KeystoreCli implements Keystore {
         put_requests.put(i, cp);
 
         ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+
         scheduler.scheduleAtFixedRate(()->{
-            if (put_requests.containsKey(i)){
+            if ( !cp.isDone()){
                 ms.sendAsync(srv,"put", s.encode(putReq));
             }
             else{
+
                 scheduler.shutdown();
             }
-        }, 30, 10 , TimeUnit.SECONDS);
+        }, 30, 30 , TimeUnit.SECONDS);
 
         i++;
 

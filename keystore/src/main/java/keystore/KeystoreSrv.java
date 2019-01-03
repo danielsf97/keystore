@@ -150,19 +150,24 @@ public class KeystoreSrv extends Serv {
         for(Long keyId: keys.keySet()){
 
             LinkedList<CompletableFuture<Void>> q = keyLocks.get(keyId);
-            if (q.isEmpty()) {
-                System.out.println("Unlocked " + keyId);
-                keyBusy.put(keyId,false);
 
-                boolean dataContainsKey;
-                synchronized (data) {
-                    dataContainsKey = data.containsKey(keyId);
+            if(q!=null) {
+                if (q.isEmpty()) {
+                    System.out.println("Unlocked " + keyId);
+                    keyBusy.put(keyId, false);
+
+                    boolean dataContainsKey;
+                    synchronized (data) {
+                        dataContainsKey = data.containsKey(keyId);
+                    }
+                    if (!dataContainsKey) {
+                        keyLocks.remove(keyId);
+                        keyBusy.remove(keyId);
+                    }
+
+                } else {
+                    q.removeFirst().complete(null);
                 }
-                if(!dataContainsKey) { keyLocks.remove(keyId); keyBusy.remove(keyId);}
-
-            }
-            else{
-                q.removeFirst().complete(null);
             }
 
 
