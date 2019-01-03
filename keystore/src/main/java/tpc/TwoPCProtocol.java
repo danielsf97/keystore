@@ -1,4 +1,4 @@
-package keystore.tpc;
+package tpc;
 
 import io.atomix.utils.serializer.Serializer;
 

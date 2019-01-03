@@ -8,9 +8,7 @@ import io.atomix.utils.serializer.Serializer;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
 
 /**
@@ -58,9 +56,10 @@ public class KeystoreCli implements Keystore {
 
         ms.registerHandler(KeystoreProtocol.PutResp.class.getName(), (o, m) -> {
             KeystoreProtocol.PutResp putResp = s.decode(m);
-
-            put_requests.remove(putResp.txId).complete(putResp.state);
-
+            System.out.println("RESPONSE");
+            if (put_requests.containsKey(putResp.txId)) {
+                put_requests.remove(putResp.txId).complete(putResp.state);
+            }
         }, es);
 
         ms.registerHandler(KeystoreProtocol.GetResp.class.getName(), (o, m) -> {
@@ -95,6 +94,16 @@ public class KeystoreCli implements Keystore {
 
         CompletableFuture<Boolean> cp = new CompletableFuture<>();
         put_requests.put(i, cp);
+
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        scheduler.scheduleAtFixedRate(()->{
+            if (put_requests.containsKey(i)){
+                ms.sendAsync(srv,"put", s.encode(putReq));
+            }
+            else{
+                scheduler.shutdown();
+            }
+        }, 30, 10 , TimeUnit.SECONDS);
 
         i++;
 

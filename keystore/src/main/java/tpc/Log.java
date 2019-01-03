@@ -1,4 +1,4 @@
-package keystore.tpc;
+package tpc;
 
 import io.atomix.storage.journal.SegmentedJournal;
 import io.atomix.storage.journal.SegmentedJournalReader;
@@ -42,7 +42,7 @@ public class Log<T> {
          * @param trans_id      ID da entrada.
          * @param action        Conteúdo da entrada.
          */
-        public LogEntry(int trans_id, T action) {
+        LogEntry(int trans_id, T action) {
             this.trans_id = trans_id;
             this.action = action;
 
@@ -95,7 +95,6 @@ public class Log<T> {
     // Variáveis
     // **************************************************************************
 
-    private Serializer s;
     private SegmentedJournal<Object> j;
     private SegmentedJournalWriter<Object> w;
 
@@ -110,8 +109,8 @@ public class Log<T> {
      * @param name Nome do log.
      */
     public Log(String name) {
-        this.s = Serializer.builder()
-                .withTypes(Log.LogEntry.class)
+        Serializer s = Serializer.builder()
+                .withTypes(LogEntry.class)
                 .withTypes(SimpleTwoPCTransaction.class)
                 .build();
 
@@ -129,17 +128,6 @@ public class Log<T> {
     // **************************************************************************
     // Métodos públicos
     // **************************************************************************
-
-    /**
-     * Retorna o último indíce escrito no log.
-     *
-     * @return o último indíce escrito no log.
-     */
-    public long last_index() {
-        System.out.println(w.getLastIndex());
-        return w.getLastIndex();
-    }
-
 
     /**
      * Escreve no log.

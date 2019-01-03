@@ -2,7 +2,7 @@ package keystore;
 
 import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Serializer;
-import keystore.tpc.Participant2;
+import tpc.Participant;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -11,7 +11,7 @@ import java.util.TreeSet;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
-public class KeystoreSrv2 extends Serv {
+public class KeystoreSrv extends Serv {
 
 
     private static final Address[] addresses = new Address[]{
@@ -27,7 +27,7 @@ public class KeystoreSrv2 extends Serv {
     private static Serializer s;
 
 
-    private KeystoreSrv2(int id){
+    private KeystoreSrv(int id){
         super(addresses[id]);
 
         this.data = new HashMap<>();
@@ -51,7 +51,7 @@ public class KeystoreSrv2 extends Serv {
         Consumer<Map<Long,byte[]>> abort = this::releaseLocksAbort;
 
 
-        new Participant2<>(id, ms, es, "KeyStoreSrv" + id, prepare, commit, abort);
+        new Participant<>(id, ms, es, "KeyStoreSrv" + id, prepare, commit, abort);
 
         ms.registerHandler(Server_KeystoreSrvProtocol.GetControllerReq.class.getName(), this::get, es);
 
@@ -84,8 +84,9 @@ public class KeystoreSrv2 extends Serv {
 
     public static void main(String[] args) {
         int id = Integer.parseInt(args[0]);
-        new KeystoreSrv2(id);
+        new KeystoreSrv(id);
     }
+
 
 
     private void getLocks(TreeSet<Long> keys) {
@@ -100,6 +101,7 @@ public class KeystoreSrv2 extends Serv {
                 ReentrantLock lock = new ReentrantLock();
                 lock.lock();
                 keyLocks.put(keyId, lock);
+                System.out.println("Locked " + keyId);
             }
         }
         this.keyLocksGlobalLock.unlock();
@@ -122,10 +124,16 @@ public class KeystoreSrv2 extends Serv {
 
 
     private void releaseLocks(Map<Long,byte[]> keys) {
+        this.keyLocksGlobalLock.lock();
+
         for(Long keyId: keys.keySet()){
-            if (keyLocks.get(keyId).isLocked())
+            if (keyLocks.get(keyId).isLocked()) {
+                System.out.println("Unlocked " + keyId);
                 keyLocks.get(keyId).unlock();
+           }
         }
+        this.keyLocksGlobalLock.unlock();
+
     }
 
 

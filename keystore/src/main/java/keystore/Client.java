@@ -43,7 +43,31 @@ public class Client {
             }else{
                 System.out.println("Chaves não Adicionadas");
             }
-        }).get();
+        });
+
+        ks.put(chaves).thenAccept((b) -> {
+            if(b){
+                System.out.println("Chaves Adicionadas2");
+            }else{
+                System.out.println("Chaves não Adicionadas2");
+            }
+        });
+
+        Map<Long,byte[]> chaves1 = new HashMap<>();
+        chaves1.put(1000003L, "Chave 1".getBytes());
+           chaves1.put(1000001L, "Chave 2".getBytes());
+        //   chaves.put(1000002L, "Chave 3".getBytes());
+        chaves1.put(1000009L, "Chave 4".getBytes());
+             chaves1.put(1000004L, "Chave 5".getBytes());
+
+
+        ks.put(chaves1).thenAccept((b) -> {
+            if(b){
+                System.out.println("Chaves Adicionadas3");
+            }else{
+                System.out.println("Chaves não Adicionadas3");
+            }
+        });
 
       /*  ks.put(chaves).thenAccept((b) -> {
             if(b){
@@ -54,14 +78,14 @@ public class Client {
         });*/
 
 
-        Collection<Long> keys = new ArrayList<>();
+     /*   Collection<Long> keys = new ArrayList<>();
         keys.add(1000000L);
-        keys.add(1000004L);
+        keys.add(1000003L);
         ks.get(keys).thenAccept(((res) -> {
             for( Map.Entry<Long, byte[]> entry : res.entrySet()){
                 System.out.println("Key: " + entry.getKey() + ", Value:" + new String(entry.getValue()));
             }
-        }));
+        }));*/
 
     }
 }

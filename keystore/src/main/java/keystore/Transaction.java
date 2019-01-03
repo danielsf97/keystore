@@ -2,7 +2,7 @@ package keystore;
 
 import io.atomix.utils.net.Address;
 
-import keystore.tpc.TwoPCTransaction;
+import tpc.TwoPCTransaction;
 
 import java.util.HashMap;
 import java.util.Map;

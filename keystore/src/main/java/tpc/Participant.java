@@ -1,48 +1,56 @@
-package keystore.tpc;
+package tpc;
 
+import io.atomix.cluster.messaging.ManagedMessagingService;
 import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Serializer;
-import keystore.Serv;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
-public class Participant <T> extends Serv {
+public class Participant<T> {
 
-    protected final Map<Long, T> data;
-    private Map<Long, ReentrantLock> keyLocks;
-    private final Map<Integer,Map<Long, T>> pendentPuts;
+
+    private final Map<Integer,T> pendentTransactions;
     private Set<Integer> runningTransactions;
 
     private static Serializer s ;
 
     private ReentrantLock runningTransactionsGlobalLock;
-    private ReentrantLock keyLocksGlobalLock;
 
     private int myId;
+    private Log<Object> log;
+    private ManagedMessagingService ms;
+    private Function<T, CompletableFuture<Void>> prepare;
+    private Consumer<T> commit;
+    private Consumer<T> abort;
 
-    public Participant(Address address, String name, int id){
-        super(address,name);
+    public Participant(int id, ManagedMessagingService ms, ExecutorService es, String name, Function<T,CompletableFuture<Void>> prepare, Consumer<T> commit, Consumer<T> abort) {
 
         this.myId = id;
 
+        this.ms = ms;
+        this.log = new Log<>(name);
+        this.prepare = prepare;
+        this.commit = commit;
+        this.abort = abort;
         s = TwoPCProtocol.newSerializer();
 
-        this.pendentPuts = new HashMap<>();
-        this.data = new HashMap<>();
-        this.keyLocks = new HashMap<>();
+        this.pendentTransactions = new HashMap<>();
+
         this.runningTransactions = new TreeSet<>();
 
         this.runningTransactionsGlobalLock = new ReentrantLock();
-        this.keyLocksGlobalLock = new ReentrantLock();
 
-        ms.start();
 
         restore();
 
-        ms.registerHandler(TwoPCProtocol.ControllerPreparedReq.class.getName(), this::put1, es);
+        ms.registerHandler(TwoPCProtocol.ControllerPreparedReq.class.getName(), this::phase1, es);
 
-        ms.registerHandler(TwoPCProtocol.ControllerCommitReq.class.getName(), this::put2, es);
+        ms.registerHandler(TwoPCProtocol.ControllerCommitReq.class.getName(), this::phase2, es);
 
         ms.registerHandler(TwoPCProtocol.ControllerAbortReq.class.getName(), this::abort, es);
 
@@ -50,8 +58,9 @@ public class Participant <T> extends Serv {
     }
 
 
+
     private void restore() {
-        HashMap<Integer, HashMap<Long,T>> transKeys = new HashMap<>();
+        HashMap<Integer, T> transKeys = new HashMap<>();
         HashMap<Integer,String> phases = new HashMap<>();
 
 
@@ -60,7 +69,7 @@ public class Participant <T> extends Serv {
             System.out.println(entry.toString());
             Object o = entry.getAction();
             if (o instanceof HashMap) {
-                transKeys.put(entry.getTrans_id(), (HashMap<Long, T>) o);
+                transKeys.put(entry.getTrans_id(), (T) o);
             }
             else {
                 phases.put(entry.getTrans_id(), (String) o );
@@ -70,25 +79,19 @@ public class Participant <T> extends Serv {
 
         for(Map.Entry<Integer,String> entry : phases.entrySet()){
             if (entry.getValue().equals(Phase.PREPARED.toString())){
-                HashMap<Long, T> keys = transKeys.get(entry.getKey());
-                pendentPuts.put(entry.getKey(),keys);
+                T keys = transKeys.get(entry.getKey());
+                pendentTransactions.put(entry.getKey(),keys);
                 runningTransactions.add(entry.getKey());
-                for(Long key: keys.keySet()) {
-                    ReentrantLock lock = new ReentrantLock();
-                    lock.lock();
-                    keyLocks.put(key, lock);
-                }
+                prepare.apply(keys);
             }
             else if (entry.getValue().equals(Phase.COMMITTED.toString())){
-                HashMap<Long,T> keys = transKeys.get(entry.getKey());
-                for(Map.Entry<Long, T> key: keys.entrySet()){
-                    data.put(key.getKey(), key.getValue());
-                    keyLocks.put(key.getKey(), new ReentrantLock());
-                }
+                T keys = transKeys.get(entry.getKey());
+                commit.accept(keys);
 
             }
         }
     }
+
 
     private void abort(Address address, byte[] bytes) {
         System.out.println("ABORT");
@@ -102,27 +105,24 @@ public class Participant <T> extends Serv {
         runningTransactionsGlobalLock.unlock();
 
         if(!existentTransaction){
-            //Quando a transação já fez rollback
-
             TwoPCProtocol.ControllerAbortResp p = new TwoPCProtocol.ControllerAbortResp(trans_id,myId);
             ms.sendAsync(address, TwoPCProtocol.ControllerAbortResp.class.getName(),s.encode(p));
             System.out.println("Transaction " + trans_id + " already doesn't exist!!");
         }
         else {
             // Quando conseguiu obter o lock(está prepared)
-            // Quando ainda está à espera de obter o lock (não está nos pendentPuts)
+            // Quando ainda está à espera de obter o lock (não está nos pendentTransactions)
             log.write(trans_id, Phase.ROLLBACKED.toString());
 
             TwoPCProtocol.ControllerAbortResp p = new TwoPCProtocol.ControllerAbortResp(trans_id,myId);
             ms.sendAsync(address, TwoPCProtocol.ControllerAbortResp.class.getName(),s.encode(p));
 
-            synchronized (pendentPuts){
-                Map<Long,T> pendentKeys = pendentPuts.remove(trans_id);
+            synchronized (pendentTransactions){
+                T pendentKeys = pendentTransactions.remove(trans_id);
 
                 //Se em Prepared (Locks adquiridos)
                 if(pendentKeys != null){
-                    releaseLocksAbort(pendentKeys);
-
+                    abort.accept(pendentKeys);
                 }
             }
 
@@ -131,14 +131,13 @@ public class Participant <T> extends Serv {
     }
 
 
-    private void put1(Address address, byte[] m){
+    private void phase1(Address address, byte[] m){
         System.out.println("PUT in keystore");
         TwoPCProtocol.ControllerPreparedReq prepReq = s.decode(m);
         int trans_id = prepReq.txId;
-
         boolean pendentPutsContainsKey;
-        synchronized (pendentPuts){
-            pendentPutsContainsKey = pendentPuts.containsKey(trans_id);
+        synchronized (pendentTransactions){
+            pendentPutsContainsKey = pendentTransactions.containsKey(trans_id);
         }
 
         if(pendentPutsContainsKey){ //se já está prepared
@@ -153,52 +152,68 @@ public class Participant <T> extends Serv {
             this.runningTransactions.add(trans_id);
             this.runningTransactionsGlobalLock.unlock();
 
-            Map<Long, T> keys = (Map<Long, T>) prepReq.values;
-            getLocks(new TreeSet<>(keys.keySet()));
+            T values = (T) prepReq.values;
+            prepare.apply(values).thenRun(()->{
+                System.out.println("Lock adquirido para tx:" + trans_id);
+                this.runningTransactionsGlobalLock.lock();
+                if (runningTransactions.contains(trans_id)) {
+                    synchronized (pendentTransactions) {
+                        pendentTransactions.put(trans_id, values);
+                    }
+                    this.runningTransactionsGlobalLock.unlock();
+                    log.write(trans_id, values);
+                    log.write(trans_id, Phase.PREPARED.toString());
+                    TwoPCProtocol.ControllerPreparedResp p = new TwoPCProtocol.ControllerPreparedResp(trans_id, myId);
+                    ms.sendAsync(address, TwoPCProtocol.ControllerPreparedResp.class.getName(), s.encode(p));
+                }
+                else {
+                    this.runningTransactionsGlobalLock.unlock();
+                    abort.accept(values);
+                }
+            });
 
+
+/*
             this.runningTransactionsGlobalLock.lock();
             if (runningTransactions.contains(trans_id)){
                 //se depois de obter os locks a transação ainda está ativa (not aborted)
-                synchronized (pendentPuts) {
-                    pendentPuts.put(trans_id, keys);
+                synchronized (pendentTransactions) {
+                    pendentTransactions.put(trans_id, values);
                 }
                 this.runningTransactionsGlobalLock.unlock();
-                log.write(trans_id,keys);
+                log.write(trans_id,values);
                 log.write(trans_id, Phase.PREPARED.toString());
                 TwoPCProtocol.ControllerPreparedResp p = new TwoPCProtocol.ControllerPreparedResp(trans_id,myId);
                 ms.sendAsync(address, TwoPCProtocol.ControllerPreparedResp.class.getName(),s.encode(p));
             }else{
                 //se ocorreu um abort
                 this.runningTransactionsGlobalLock.unlock();
-                releaseLocksAbort(keys);
-            }
+                abort.accept(values);
+            }*/
 
         }
     }
 
-    private void put2(Address address, byte[] m) {
+    private void phase2(Address address, byte[] m) {
         TwoPCProtocol.ControllerCommitReq commitReq = s.decode(m);
         int trans_id = commitReq.txId;
 
-        Map<Long, T> pendentKeys;
-        synchronized (pendentPuts){
-            pendentKeys = pendentPuts.remove(trans_id);
+        T pendentKeys;
+        synchronized (pendentTransactions){
+            pendentKeys = pendentTransactions.remove(trans_id);
         }
         this.runningTransactionsGlobalLock.lock();
         this.runningTransactions.remove(trans_id);
         this.runningTransactionsGlobalLock.unlock();
 
-        if (pendentKeys == null){ // se estiver committed é porque não existe nos pendentPuts
+        if (pendentKeys == null){ // se estiver committed é porque não existe nos pendentTransactions
             System.out.println("OO");
             TwoPCProtocol.ControllerCommittedResp p = new TwoPCProtocol.ControllerCommittedResp(trans_id,myId);
             ms.sendAsync(address, TwoPCProtocol.ControllerCommittedResp.class.getName(),s.encode(p));
         }
         else {
-            synchronized (data) {
-                data.putAll(pendentKeys);
-            }
 
-            releaseLocks(pendentKeys);
+            commit.accept(pendentKeys);
 
             log.write(trans_id, Phase.COMMITTED.toString());
             System.out.println("Transaction " + trans_id + " commited!!");
@@ -207,41 +222,4 @@ public class Participant <T> extends Serv {
         }
     }
 
-    private void getLocks(TreeSet<Long> keys) {
-        this.keyLocksGlobalLock.lock();
-        for(Long keyId: keys){
-            if(keyLocks.containsKey(keyId)){
-                //fazer unlock ao global porque podemos bloquear no lock da chave
-                this.keyLocksGlobalLock.unlock();
-                keyLocks.get(keyId).lock();
-                this.keyLocksGlobalLock.lock();
-            }else{
-                ReentrantLock lock = new ReentrantLock();
-                lock.lock();
-                keyLocks.put(keyId, lock);
-            }
-        }
-        this.keyLocksGlobalLock.unlock();
-    }
-
-    private void releaseLocksAbort(Map<Long,T> keys) {
-
-        this.keyLocksGlobalLock.lock();
-        for(Long keyId: keys.keySet()){
-            keyLocks.get(keyId).unlock();
-
-            boolean dataContainsKey;
-            synchronized (data) {
-                dataContainsKey = data.containsKey(keyId);
-            }
-            if(!dataContainsKey) keyLocks.remove(keyId);
-        }
-        this.keyLocksGlobalLock.unlock();
-    }
-
-    private void releaseLocks(Map<Long,T> keys) {
-        for(Long keyId: keys.keySet()){
-            keyLocks.get(keyId).unlock();
-        }
-    }
 }

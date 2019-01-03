@@ -1,16 +1,23 @@
 package keystore.tpc;
 
 
+import io.atomix.cluster.messaging.ManagedMessagingService;
 import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Serializer;
-import keystore.*;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
 
-public abstract class Coordinator <T> extends Serv {
+public class Coordinator<T> {
 
     private final Address[] addresses;
 
@@ -19,23 +26,28 @@ public abstract class Coordinator <T> extends Serv {
     private HashMap<Integer, TwoPCTransaction> currentTransactions;
     private ReentrantLock currentTransactionsGlobalLock;
 
+    private ManagedMessagingService ms;
+
     private static AtomicInteger nextTxId;
 
+    private BiConsumer<Boolean,TwoPCTransaction> whenDone;
+    private Log<Object> log;
 
-    public Coordinator(Address address, String name, Address[] addresses) {
-        super(address,name);
+
+    public Coordinator(Address[] addresses, ManagedMessagingService ms, BiConsumer<Boolean,TwoPCTransaction> whenDone, String name, ExecutorService es) {
 
         this.addresses = addresses;
+        this.ms = ms;
+        this.log = new Log<>(name);
+        this.whenDone= whenDone;
 
         sp = TwoPCProtocol.newSerializer();
 
         this.currentTransactions = new HashMap<>();
         this.currentTransactionsGlobalLock = new ReentrantLock();
-        this.nextTxId =  new AtomicInteger(0);
+        nextTxId =  new AtomicInteger(0);
 
         System.out.println("Size: " + currentTransactions.size());
-
-        ms.start();
 
         restore();
 
@@ -82,7 +94,6 @@ public abstract class Coordinator <T> extends Serv {
                 TwoPCTransaction trans = new TwoPCTransaction(tx, Phase.STARTED);
                 currentTransactions.put(trans.getId(), trans);
                 initTPC1(trans.getId(),tx.participantsToT);
-
             }
             else if (entry.getValue().equals(Phase.PREPARED.toString())){
                 SimpleTwoPCTransaction tx = keys.get(entry.getKey());
@@ -105,7 +116,7 @@ public abstract class Coordinator <T> extends Serv {
 
     /////////////////////////Phase1///////////////////////////
 
-    public void initProcess(int client_txId, Address c, Map separatedValues) {
+    public void initProcess(int client_txId, Address c, Map<Integer,T> separatedValues) {
 
         int txId = nextTxId.incrementAndGet();
 
@@ -115,7 +126,7 @@ public abstract class Coordinator <T> extends Serv {
         this.currentTransactionsGlobalLock.unlock();
 
         tx.setParticipants(separatedValues.keySet());
-        SimpleTwoPCTransaction simpleTx = new SimpleTwoPCTransaction(tx.getId(),tx.get_client_txId(),tx.getAddress(),separatedValues);
+        SimpleTwoPCTransaction<T> simpleTx = new SimpleTwoPCTransaction<>(tx.getId(),tx.get_client_txId(),tx.getAddress(),separatedValues);
         log.write(tx.getId(),simpleTx);
         log.write(tx.getId(),Phase.STARTED.toString());
         initTPC1(tx.getId(), separatedValues);
@@ -126,7 +137,7 @@ public abstract class Coordinator <T> extends Serv {
 
         for (Map.Entry<Integer, T> ksValues : separatedValues.entrySet()) {
             int pId = ksValues.getKey();
-            TwoPCProtocol.ControllerPreparedReq contReq = new TwoPCProtocol.ControllerPreparedReq(txId, pId, ksValues.getValue());
+            TwoPCProtocol.ControllerPreparedReq<T> contReq = new TwoPCProtocol.ControllerPreparedReq<>(txId, pId, ksValues.getValue());
             String type = TwoPCProtocol.ControllerPreparedReq.class.getName();
             send_iteractive(pId,txId,contReq,type);
 
@@ -147,11 +158,11 @@ public abstract class Coordinator <T> extends Serv {
             e.setParticipantStatus(rp.pId, Phase.PREPARED);
             if (e.checkParticipantsPhases(Phase.PREPARED)){
                 e.setPhase(Phase.PREPARED);
+                whenDone.accept(true,e);
                 e.unlock();
 
                 log.write(rp.txId,Phase.PREPARED.toString());
 
-                whenComplete(true,e.get_client_txId(),e.getAddress());
 
                 System.out.println("Init Commit");
                 initTPC2(e);
@@ -222,12 +233,13 @@ public abstract class Coordinator <T> extends Serv {
         if (e.getPhase() != Phase.ROLLBACKED && e.getPhase() != Phase.ABORT) {
 
             e.setPhase(Phase.ABORT);
+            whenDone.accept(false,e);
             e.unlock();
 
             log.write(txId, Phase.ABORT.toString());
 
 
-            whenComplete(false,e.get_client_txId(),e.getAddress());
+
 
             String type = TwoPCProtocol.ControllerAbortReq.class.getName();
             for (Integer pId : e.getParticipants()) {
@@ -330,9 +342,8 @@ public abstract class Coordinator <T> extends Serv {
             }
 
 
-        }, 0, 5, TimeUnit.SECONDS);
+        }, 5, 5, TimeUnit.SECONDS);
     }
 
-    public abstract void whenComplete(Boolean aBoolean, int txIdClient, Address address);
 
 }

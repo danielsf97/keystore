@@ -2,15 +2,20 @@ package keystore;
 
 import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Serializer;
-import keystore.tpc.Coordinator;
-import keystore.tpc.Phase;
+import tpc.Coordinator;
+import tpc.Phase;
+import tpc.TwoPCTransaction;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
 
 
-public class Server extends Coordinator {
+public class Server extends Serv {
 
     private static final Address[] addresses = new Address[] {
             Address.from("localhost", 12345),
@@ -26,12 +31,25 @@ public class Server extends Coordinator {
     private HashMap<Integer, Transaction> currentGets;
     private ReentrantLock currentGetsGlobalLock;
     private AtomicInteger nextGetId;
+    private Coordinator coordinator;
 
     //private static AtomicInteger nextTxId;
 
 
     private Server() {
-        super(Address.from("localhost", 12350),"Server",addresses);
+        super(Address.from("localhost", 12350));
+
+
+        ms.start();
+
+        BiConsumer<Boolean,TwoPCTransaction> whenDone = (aBoolean, twoPCTransaction) -> {
+            KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp( aBoolean, twoPCTransaction.get_client_txId());
+            ms.sendAsync(twoPCTransaction.getAddress(), KeystoreProtocol.PutResp.class.getName(), s.encode(p));
+        };
+
+
+
+        coordinator = new Coordinator<Map<Long,byte[]>>(addresses,ms,whenDone,"Server",es);
 
 
 
@@ -50,8 +68,7 @@ public class Server extends Coordinator {
             Map<Long,byte[]> values = req.values;
             Map<Integer, Map<Long, byte []>> separatedValues = valuesSeparator(values);
 
-
-            initProcess(req.txId,c,separatedValues);
+            coordinator.initProcess(req.txId,c,separatedValues);
 
 
         },es);
@@ -171,11 +188,7 @@ public class Server extends Coordinator {
         return res;
     }
 
-    @Override
-    public void whenComplete(Boolean aBoolean, int txIdClient, Address address) {
-        KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp( aBoolean, txIdClient);
-        ms.sendAsync(address, KeystoreProtocol.PutResp.class.getName(), s.encode(p));
-    }
+
 
 
     public static void main(String[] args) {

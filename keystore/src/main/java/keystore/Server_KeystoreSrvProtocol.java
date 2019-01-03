@@ -1,7 +1,7 @@
 package keystore;
 
 import io.atomix.utils.serializer.Serializer;
-import keystore.tpc.TwoPCProtocol;
+import tpc.TwoPCProtocol;
 
 import java.util.Collection;
 import java.util.Map;
