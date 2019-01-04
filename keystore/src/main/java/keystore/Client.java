@@ -1,9 +1,8 @@
 package keystore;
 
-import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * O programa Client é usado para teste do sistema distribuído de
@@ -96,9 +95,10 @@ public class Client {
 
 
         ks.put(chaves1).thenAccept((b) -> {
-            if(b){
+            if(b) {
                 System.out.println("Chaves Adicionadas3");
-            }else{
+            }
+            else {
                 System.out.println("Chaves não Adicionadas3");
             }
         });

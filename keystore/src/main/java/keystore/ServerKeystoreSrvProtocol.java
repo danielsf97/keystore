@@ -6,7 +6,7 @@ import tpc.TwoPCProtocol;
 import java.util.Collection;
 import java.util.Map;
 
-public class Server_KeystoreSrvProtocol extends TwoPCProtocol {
+public class ServerKeystoreSrvProtocol extends TwoPCProtocol {
 
     public static Serializer newSerializer() {
         return Serializer.builder()
@@ -26,7 +26,8 @@ public class Server_KeystoreSrvProtocol extends TwoPCProtocol {
         int txId;
         int pId;
         Collection<Long> keys;
-        GetControllerReq(int txId, int pId, Collection<Long> keys){
+
+        GetControllerReq(int txId, int pId, Collection<Long> keys) {
             this.txId = txId;
             this.pId = pId;
             this.keys = keys;
@@ -42,11 +43,11 @@ public class Server_KeystoreSrvProtocol extends TwoPCProtocol {
         int txId;
         int pId;
         Map<Long, byte[]> values;
-        GetControllerResp(int txId, int pId, Map <Long, byte[]> values){
+
+        GetControllerResp(int txId, int pId, Map <Long, byte[]> values) {
             this.txId = txId;
             this.pId = pId;
             this.values = values;
         }
     }
-
 }

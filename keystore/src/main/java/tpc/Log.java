@@ -29,7 +29,7 @@ class Log<T> {
         // Variáveis
         // **********************************************************************
 
-        private int trans_id;
+        private int id;
         private T action;
 
 
@@ -40,11 +40,11 @@ class Log<T> {
         /**
          * Construtor parametrizado de uma entrada no log.
          *
-         * @param trans_id      ID da entrada.
+         * @param id            ID da entrada.
          * @param action        Conteúdo da entrada.
          */
-        LogEntry(int trans_id, T action) {
-            this.trans_id = trans_id;
+        LogEntry(int id, T action) {
+            this.id = id;
             this.action = action;
 
         }
@@ -62,8 +62,8 @@ class Log<T> {
          *
          * @return  o ID de uma entrada.
          */
-        int getTrans_id() {
-            return trans_id;
+        int getId() {
+            return id;
         }
 
         /**
@@ -86,7 +86,7 @@ class Log<T> {
          * @return a representação textual de uma entrada no log.
          */
         public String toString() {
-            return "xid=" + trans_id + " " + action;
+            return "xid=" + id + " " + action;
         }
 
     }
@@ -116,7 +116,6 @@ class Log<T> {
                 .withTypes(TreeMap.class)
                 .build();
 
-
         this.j = SegmentedJournal.builder()
                 .withName(name)
                 .withSerializer(s)
@@ -141,8 +140,6 @@ class Log<T> {
         w = j.writer();
         w.append(new Log.LogEntry<Object>(transId, action));
         w.flush();
-      //  w.close();
-
     }
 
     /**
@@ -150,7 +147,7 @@ class Log<T> {
      *
      * @return          Lista de entradas do log.
      */
-     List<LogEntry> read(){
+     List<LogEntry> read() {
         List<LogEntry> entries = new ArrayList<>();
         SegmentedJournalReader<Object> r = j.openReader(0);
         while(r.hasNext()) {
@@ -159,6 +156,4 @@ class Log<T> {
         }
         return entries;
     }
-
-
 }

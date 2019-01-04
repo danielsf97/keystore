@@ -36,6 +36,7 @@ class KeystoreProtocol {
     static class PutReq {
         int txId;
         Map<Long,byte[]> values;
+
         PutReq(Map<Long, byte[]> values, int txId) {
             this.values = values;
             this.txId = txId;
@@ -50,8 +51,10 @@ class KeystoreProtocol {
     static class PutResp {
         int txId;
         boolean state;
+
         PutResp(boolean state, int txId) {
-            this.state = state;this.txId=txId;
+            this.state = state;
+            this.txId = txId;
         }
     }
 
@@ -63,6 +66,7 @@ class KeystoreProtocol {
     static class GetReq {
         int txId;
         Collection<Long> keys;
+
         GetReq(Collection<Long> keys, int txId) {
             this.keys = keys;
             this.txId = txId;
@@ -77,10 +81,10 @@ class KeystoreProtocol {
     static class GetResp {
         int txId;
         Map<Long, byte[]> values;
+
         GetResp(Map<Long, byte[]> values, int txId) {
             this.values = values;
             this.txId = txId;
         }
     }
-
 }

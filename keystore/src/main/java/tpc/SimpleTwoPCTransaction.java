@@ -23,7 +23,7 @@ class SimpleTwoPCTransaction<T> {
      * @param clientAddress         Endereço do cliente
      * @param participantsToT       Mapa de associação dos servidores participantes e chaves a armazenar
      */
-    SimpleTwoPCTransaction(Integer id, Integer clientId, Address clientAddress, Map<Integer, T> participantsToT){
+    SimpleTwoPCTransaction(Integer id, Integer clientId, Address clientAddress, Map<Integer, T> participantsToT) {
         this.id = id;
         this.clientId = clientId;
         this.clientAddress = clientAddress.port();

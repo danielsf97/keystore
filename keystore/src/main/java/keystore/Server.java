@@ -17,7 +17,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 
-
 public class Server {
 
     private static final Address[] addresses = new Address[] {
@@ -29,89 +28,72 @@ public class Server {
 
     private static Serializer s = KeystoreProtocol
             .newSerializer();
-    private static Serializer sp = Server_KeystoreSrvProtocol.newSerializer();
+    private static Serializer sp = ServerKeystoreSrvProtocol.newSerializer();
 
     private HashMap<Integer, Transaction> currentGets;
     private ReentrantLock currentGetsGlobalLock;
     private AtomicInteger nextGetId;
-    private Coordinator<Map<Long,byte[]>> coordinator;
+    private Coordinator<Map<Long, byte[]>> coordinator;
     private ManagedMessagingService ms;
 
 
     private Server() {
         ExecutorService es = Executors.newSingleThreadExecutor();
-        ms = NettyMessagingService.builder()
+
+        this.ms = NettyMessagingService.builder()
                 .withAddress(Address.from("localhost", 12350))
                 .build();
 
-        ms.start();
+        this.ms.start();
 
         BiConsumer<Boolean,TwoPCTransaction> whenDone = (aBoolean, twoPCTransaction) -> {
-            KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp( aBoolean, twoPCTransaction.get_client_txId());
+            KeystoreProtocol.PutResp p = new KeystoreProtocol.PutResp( aBoolean, twoPCTransaction.getClientTxId());
             ms.sendAsync(twoPCTransaction.getAddress(), KeystoreProtocol.PutResp.class.getName(), s.encode(p));
         };
 
 
-        coordinator = new Coordinator<>(addresses,ms,whenDone,"Server", es);
-
-
+        this.coordinator = new Coordinator<>(addresses, ms, whenDone, "Server", es);
 
         this.currentGets = new HashMap<>();
         this.currentGetsGlobalLock = new ReentrantLock();
         this.nextGetId =  new AtomicInteger(0);
 
-
-
-        ms.registerHandler("put", (c, m) -> {
-            System.out.println("HELLOOOOOO FROM SERVER");
+        this.ms.registerHandler("put", (c, m) -> {
             KeystoreProtocol.PutReq req = s.decode(m);
 
+            Map<Long, byte[]> values = req.values;
+            Map<Integer, Map<Long, byte[]>> separatedValues = valuesSeparator(values);
 
-            Map<Long,byte[]> values = req.values;
-            Map<Integer, Map<Long, byte []>> separatedValues = valuesSeparator(values);
-
-            coordinator.initProcess(req.txId,c,separatedValues);
-
-
+            coordinator.initProcess(req.txId, c, separatedValues);
         }, es);
 
-        ms.registerHandler("get", (c,m) -> {
+        this.ms.registerHandler("get", (c, m) -> {
 
             KeystoreProtocol.GetReq req = s.decode(m);
 
             int txId = nextGetId.incrementAndGet();
-            Transaction trans = new Transaction(txId,req.txId, c);
+            Transaction trans = new Transaction(txId, req.txId, c);
 
             this.currentGetsGlobalLock.lock();
             currentGets.put(txId, trans);
             this.currentGetsGlobalLock.unlock();
 
-            processGetReq(trans,req);
-
+            processGetReq(trans, req);
         }, es);
 
 
-
-
-        ms.registerHandler(Server_KeystoreSrvProtocol.GetControllerResp.class.getName(),(o,m)->{
+        this.ms.registerHandler(ServerKeystoreSrvProtocol.GetControllerResp.class.getName(), (o, m)-> {
             processGetResp(m);
         }, es);
 
-
-
-        ms.start();
-
+        this.ms.start();
     }
-
-
-
-
 
 
     /////////////////////////GET///////////////////////////
 
     private void processGetResp(byte[] m) {
-        Server_KeystoreSrvProtocol.GetControllerResp rp = sp.decode(m);
+        ServerKeystoreSrvProtocol.GetControllerResp rp = sp.decode(m);
 
         currentGetsGlobalLock.lock();
         Transaction e = currentGets.get(rp.txId);
@@ -126,31 +108,31 @@ public class Server {
             if (e.checkParticipantsPhases(Phase.COMMITTED)) {
                 e.setPhase(Phase.COMMITTED);
                 e.unlock();
-                KeystoreProtocol.GetResp p = new KeystoreProtocol.GetResp(e.getKeys(), e.get_client_txId());
-                ms.sendAsync(e.getAddress(),KeystoreProtocol.GetResp.class.getName(),s.encode(p));
+                KeystoreProtocol.GetResp p = new KeystoreProtocol.GetResp(e.getKeys(), e.getClientTxId());
+                ms.sendAsync(e.getAddress(),KeystoreProtocol.GetResp.class.getName(), s.encode(p));
 
                 currentGetsGlobalLock.lock();
                 currentGets.remove(rp.txId);
                 currentGetsGlobalLock.unlock();
-            }else{
+            }
+            else{
                 e.unlock();
             }
         }
     }
 
 
-    private void processGetReq(Transaction tx, KeystoreProtocol.GetReq req){
+    private void processGetReq(Transaction tx, KeystoreProtocol.GetReq req) {
         Collection<Long> keys = req.keys;
         Map<Integer, Collection<Long>> separatedValues = valuesSeparator(keys);
         tx.setParticipants(separatedValues.keySet());
-        initget(tx.getId(), separatedValues);
+        initGet(tx.getId(), separatedValues);
     }
 
-    private Map<Integer,Collection<Long>> valuesSeparator(Collection<Long> keys){
+    private Map<Integer,Collection<Long>> valuesSeparator(Collection<Long> keys) {
         Map<Integer, Collection<Long>> res = new HashMap<>();
-        for(Long key : keys){
+        for(Long key : keys) {
             int ks = (int) (key % (long) addresses.length);
-            System.out.println("Participante " + ks);
             if(!res.containsKey(ks)) res.put(ks, new ArrayList<>());
             Collection<Long> ksCol = res.get(ks);
             ksCol.add(key);
@@ -161,28 +143,25 @@ public class Server {
 
 
 
-    private void initget(int txId, Map<Integer, Collection<Long>> separatedValues) {
+    private void initGet(int txId, Map<Integer, Collection<Long>> separatedValues) {
 
         for (Map.Entry<Integer, Collection<Long>> ksValues : separatedValues.entrySet()) {
             int participant = ksValues.getKey();
-            System.out.println("Enviado para o participante" + participant);
-            Server_KeystoreSrvProtocol.GetControllerReq contReq = new Server_KeystoreSrvProtocol.GetControllerReq(txId, participant, ksValues.getValue());
-            ms.sendAsync(addresses[ participant],
-                    Server_KeystoreSrvProtocol.GetControllerReq.class.getName(),
-                    sp.encode(contReq));
+            ServerKeystoreSrvProtocol.GetControllerReq contReq = new ServerKeystoreSrvProtocol.GetControllerReq(txId, participant, ksValues.getValue());
+            this.ms.sendAsync(addresses[participant], ServerKeystoreSrvProtocol.GetControllerReq.class.getName(), sp.encode(contReq));
         }
 
         ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-        scheduler.schedule(()->{
-             currentGetsGlobalLock.lock();
-             Transaction e = currentGets.get(txId);
-             currentGetsGlobalLock.unlock();
+        scheduler.schedule(() -> {
+            currentGetsGlobalLock.lock();
+            Transaction e = currentGets.get(txId);
+            currentGetsGlobalLock.unlock();
 
             if (e != null) {
                 e.lock();
                 if (!e.checkParticipantsPhases(Phase.COMMITTED)) {
-                    KeystoreProtocol.GetResp p = new KeystoreProtocol.GetResp(e.getKeys(), e.get_client_txId());
-                    ms.sendAsync(e.getAddress(),KeystoreProtocol.GetResp.class.getName(),s.encode(p));
+                    KeystoreProtocol.GetResp p = new KeystoreProtocol.GetResp(e.getKeys(), e.getClientTxId());
+                    ms.sendAsync(e.getAddress(), KeystoreProtocol.GetResp.class.getName(), s.encode(p));
 
                     currentGetsGlobalLock.lock();
                     currentGets.remove(txId);
@@ -190,7 +169,7 @@ public class Server {
                 }
                 e.unlock();
             }
-            }, 10, TimeUnit.SECONDS);
+        }, 10, TimeUnit.SECONDS);
     }
 
 
@@ -200,9 +179,8 @@ public class Server {
 
     private Map<Integer, Map<Long,byte[]>> valuesSeparator(Map<Long,byte[]> values) {
         Map<Integer, Map<Long, byte []>> res = new TreeMap<>();
-        for(Map.Entry<Long, byte []> value: values.entrySet()){
+        for(Map.Entry<Long, byte []> value: values.entrySet()) {
             int ks = (int) (value.getKey() % (long) addresses.length);
-            System.out.println("Participante " + ks);
             if(!res.containsKey(ks)) res.put(ks, new HashMap<>());
             Map<Long, byte []> ksMap = res.get(ks);
             ksMap.put(value.getKey(), value.getValue());
@@ -211,12 +189,7 @@ public class Server {
         return res;
     }
 
-
-
-
     public static void main(String[] args) {
         new Server();
     }
-
-
 }

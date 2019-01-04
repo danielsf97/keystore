@@ -13,48 +13,48 @@ public class TwoPCTransaction {
 
     private Integer id;
     private Collection<Integer> participants;
-    private Map<Integer, Phase> participants_status;
+    private Map<Integer, Phase> participantsStatus;
     private Phase phase;
-    private Integer client_txId;
+    private Integer clientTxId;
     private Address address;
     private ReentrantLock lock;
 
 
-    public TwoPCTransaction(Integer id, Integer client_txId, Address address){
+    public TwoPCTransaction(Integer id, Integer clientTxId, Address address) {
         this.id = id;
-        this.client_txId = client_txId;
+        this.clientTxId = clientTxId;
         this.phase = Phase.STARTED;
         this.address = address;
-        this.participants_status = new HashMap<>();
+        this.participantsStatus = new HashMap<>();
         this.lock = new ReentrantLock();
     }
 
-    TwoPCTransaction(SimpleTwoPCTransaction tx, Phase phase){
+    TwoPCTransaction(SimpleTwoPCTransaction tx, Phase phase) {
         this.id = tx.id;
-        this.client_txId = tx.clientId;
+        this.clientTxId = tx.clientId;
         this.address = Address.from(tx.clientAddress);
         this.participants = tx.participantsToT.keySet();
-        this.participants_status = new HashMap<>();
+        this.participantsStatus = new HashMap<>();
         this.phase = phase;
         this.lock = new ReentrantLock();
-        for(Integer p : participants){
-            participants_status.put(p, phase);
+        for(Integer p : participants) {
+            participantsStatus.put(p, phase);
         }
     }
 
-    public int getId(){
+    public int getId() {
         return id;
     }
 
-    public Address getAddress(){
+    public Address getAddress() {
         return address;
     }
 
-    public int get_client_txId(){
-        return client_txId;
+    public int getClientTxId() {
+        return clientTxId;
     }
 
-    Phase getPhase(){
+    Phase getPhase() {
         return phase;
     }
 
@@ -62,33 +62,30 @@ public class TwoPCTransaction {
         return participants;
     }
 
-    public Phase getParticipantStatus(int pId){
-        return participants_status.get(pId);
+    public Phase getParticipantStatus(int pId) {
+        return participantsStatus.get(pId);
     }
 
-
-
-    public void setPhase(Phase phase){
+    public void setPhase(Phase phase) {
         this.phase = phase;
     }
 
-    public void setParticipants(Collection<Integer> participants){
+    public void setParticipants(Collection<Integer> participants) {
         this.participants = participants;
-        for(Integer p : participants){
-            participants_status.put(p, Phase.STARTED);
+
+        for(Integer p : participants) {
+            participantsStatus.put(p, Phase.STARTED);
         }
     }
 
-    public void setParticipantStatus(Integer participant, Phase resp){
-        System.out.println("CHANGING STATUS");
-        participants_status.put(participant, resp);
+    public void setParticipantStatus(Integer participant, Phase resp) {
+        participantsStatus.put(participant, resp);
     }
 
-
-    public boolean checkParticipantsPhases(Phase phase){
+    public boolean checkParticipantsPhases(Phase phase) {
         boolean status = true;
 
-        for (Phase s: participants_status.values()){
+        for (Phase s: participantsStatus.values()) {
             if (s != phase )
                 status= false;
         }
@@ -96,15 +93,11 @@ public class TwoPCTransaction {
         return status;
     }
 
-
-
-    public void lock(){
+    public void lock() {
         this.lock.lock();
     }
 
-    public void unlock(){
+    public void unlock() {
         this.lock.unlock();
     }
-
-
 }

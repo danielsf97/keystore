@@ -4,7 +4,6 @@ import io.atomix.cluster.messaging.ManagedMessagingService;
 import io.atomix.cluster.messaging.impl.NettyMessagingService;
 import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Serializer;
-import tpc.Phase;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -27,8 +26,8 @@ public class KeystoreCli implements Keystore {
     private final ManagedMessagingService ms;
     private final Address srv;
     private final Serializer s;
-    private final Map<Integer, CompletableFuture<Boolean>> put_requests;
-    private final Map<Integer,CompletableFuture<Map<Long, byte[]>>> get_requests;
+    private final Map<Integer, CompletableFuture<Boolean>> putRequests;
+    private final Map<Integer,CompletableFuture<Map<Long, byte[]>>> getRequests;
     private final ExecutorService es;
     private int i;
 
@@ -44,32 +43,32 @@ public class KeystoreCli implements Keystore {
      * @throws Exception    TODO:
      */
     KeystoreCli(int port) throws Exception {
-        i = 0;
-        es = Executors.newSingleThreadExecutor();
-        srv = Address.from("localhost", port);
-        ms = NettyMessagingService.builder()
+        this.i = 0;
+        this.es = Executors.newSingleThreadExecutor();
+        this.srv = Address.from("localhost", port);
+        this.ms = NettyMessagingService.builder()
                 .withAddress(Address.from(10000))
                 .build();
-        s = KeystoreProtocol.newSerializer();
+        this.s = KeystoreProtocol.newSerializer();
 
-        put_requests = new HashMap<>();
-        get_requests = new HashMap<>();
+        this.putRequests = new HashMap<>();
+        this.getRequests = new HashMap<>();
 
-        ms.registerHandler(KeystoreProtocol.PutResp.class.getName(), (o, m) -> {
+        this.ms.registerHandler(KeystoreProtocol.PutResp.class.getName(), (o, m) -> {
             KeystoreProtocol.PutResp putResp = s.decode(m);
-            if (put_requests.containsKey(putResp.txId)) {
-                put_requests.remove(putResp.txId).complete(putResp.state);
+            if (this.putRequests.containsKey(putResp.txId)) {
+                this.putRequests.remove(putResp.txId).complete(putResp.state);
             }
         }, es);
 
-        ms.registerHandler(KeystoreProtocol.GetResp.class.getName(), (o, m) -> {
+        this.ms.registerHandler(KeystoreProtocol.GetResp.class.getName(), (o, m) -> {
             KeystoreProtocol.GetResp getResp = s.decode(m);
-            if (get_requests.containsKey(getResp.txId)) {
-                get_requests.remove(getResp.txId).complete(getResp.values);
+            if (this.getRequests.containsKey(getResp.txId)) {
+                this.getRequests.remove(getResp.txId).complete(getResp.values);
             }
         }, es);
 
-        ms.start().get();
+        this.ms.start().get();
     }
 
 
@@ -92,16 +91,15 @@ public class KeystoreCli implements Keystore {
         ms.sendAsync(srv,"put", s.encode(putReq));
 
         CompletableFuture<Boolean> cp = new CompletableFuture<>();
-        put_requests.put(i, cp);
+        putRequests.put(i, cp);
 
         ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
-        scheduler.scheduleAtFixedRate(()->{
-            if ( !cp.isDone()){
+        scheduler.scheduleAtFixedRate(() -> {
+            if (!cp.isDone()) {
                 ms.sendAsync(srv,"put", s.encode(putReq));
             }
-            else{
-
+            else {
                 scheduler.shutdown();
             }
         }, 30, 30 , TimeUnit.SECONDS);
@@ -127,20 +125,18 @@ public class KeystoreCli implements Keystore {
         ms.sendAsync(srv,"get", s.encode(getReq));
 
         CompletableFuture<Map<Long, byte[]>> cp = new CompletableFuture<>();
-        get_requests.put(i, cp);
+        getRequests.put(i, cp);
 
         int id = i;
         ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
         scheduler.schedule(() -> {
             if (!cp.isDone()) {
                 try {
-
-                    get_requests.remove(id).complete(null);
-
+                    getRequests.remove(id).complete(null);
 
                     throw new TimeoutException("Não conseguiu efetuar o pedido de get");
-
-                } catch (TimeoutException e) {
+                }
+                catch(TimeoutException e) {
                    e.printStackTrace();
                 }
             }
