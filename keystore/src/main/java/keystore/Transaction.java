@@ -55,9 +55,9 @@ class Transaction extends TwoPCTransaction {
     /**
      * Adiciona um conjunto de chaves à transação.
      *
-     * @param keys Chaves a adicionar à transação.
+     * @param keys2 Chaves a adicionar à transação.
      */
-    public void setKeys(Map<Long, byte[]> keys) {
-        keys.putAll(keys);
+    public void setKeys(Map<Long, byte[]> keys2) {
+        keys.putAll(keys2);
     }
 }

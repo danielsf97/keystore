@@ -109,10 +109,10 @@ public class TwoPCTransaction {
 
 
     /**
-     *
+     * Retorna a fase do participante para a transação.
      *
      * @param pId
-     * @return
+     * @return Fase do participante na transação.
      */
     public Phase getParticipantStatus(int pId) {
         return participantsStatus.get(pId);
