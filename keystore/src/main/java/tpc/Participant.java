@@ -12,6 +12,10 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class Participant<T> {
+
+    // ***************************************************************************
+    // Variáveis
+    // ***************************************************************************
     
     private final Map<Integer, T> pendentTransactions;
     private Set<Integer> runningTransactions;
@@ -26,6 +30,11 @@ public class Participant<T> {
     private Function<T, CompletableFuture<Void>> prepare;
     private Consumer<T> commit;
     private Consumer<T> abort;
+
+
+    // ***************************************************************************
+    // Construtores
+    // ***************************************************************************
 
     public Participant(int id, ManagedMessagingService ms, ExecutorService es, String name, Function<T,CompletableFuture<Void>> prepare, Consumer<T> commit, Consumer<T> abort) {
         this.myId = id;
@@ -50,6 +59,9 @@ public class Participant<T> {
     }
 
 
+    // ***************************************************************************
+    // Restore
+    // ***************************************************************************
 
     private void restore() {
         
@@ -86,6 +98,10 @@ public class Participant<T> {
     }
 
 
+    // ***************************************************************************
+    // Abort
+    // ***************************************************************************
+
     private void abort(Address address, byte[] bytes) {
         TwoPCProtocol.ControllerAbortReq ab = s.decode(bytes);
         int transId = ab.txId;
@@ -117,6 +133,10 @@ public class Participant<T> {
         }
     }
 
+
+    // ***************************************************************************
+    // Two-Phase Commit - Phase 1
+    // ***************************************************************************
 
     private void phase1(Address address, byte[] m) {
         TwoPCProtocol.ControllerPreparedReq prepReq = s.decode(m);
@@ -161,6 +181,11 @@ public class Participant<T> {
         }
     }
 
+
+    // ***************************************************************************
+    // Two-Phase Commit - Phase 2
+    // ***************************************************************************
+
     private void phase2(Address address, byte[] m) {
         TwoPCProtocol.ControllerCommitReq commitReq = s.decode(m);
         int transId = commitReq.txId;
@@ -187,5 +212,4 @@ public class Participant<T> {
             this.ms.sendAsync(address, TwoPCProtocol.ControllerCommittedResp.class.getName(), s.encode(p));
         }
     }
-
 }

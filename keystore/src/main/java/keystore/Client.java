@@ -28,57 +28,63 @@ public class Client {
         Keystore ks = new KeystoreCli(12350);
 
 
-        Map<Long,byte[]> chaves = new HashMap<>();
-        chaves.put(1000000L, "Chave 1".getBytes());
-        chaves.put(1000001L, "Chave 2".getBytes());
+        Map<Long, byte[]> keys = new HashMap<>();
+        keys.put(1000000L, "Chave 1".getBytes());
+        keys.put(1000001L, "Chave 2".getBytes());
      //   chaves.put(1000002L, "Chave 3".getBytes());
-        chaves.put(1000003L, "Chave 4".getBytes());
+        keys.put(1000003L, "Chave 4".getBytes());
     //    chaves.put(1000004L, "Chave 5".getBytes());
 
-        ks.put(chaves).thenAccept((b) -> {
-            if(b){
+        ks.put(keys).thenAccept((b) -> {
+            if(b) {
                 System.out.println("Chaves Adicionadas");
-            }else{
+            }
+            else{
                 System.out.println("Chaves não Adicionadas");
             }
         });
 
-        ks.put(chaves).thenAccept((b) -> {
-            if(b){
+        ks.put(keys).thenAccept((b) -> {
+            if(b) {
                 System.out.println("Chaves Adicionadas2");
-            }else{
+            }
+            else {
                 System.out.println("Chaves não Adicionadas2");
             }
         });
 
-        ks.put(chaves).thenAccept((b) -> {
-            if(b){
+        ks.put(keys).thenAccept((b) -> {
+            if(b) {
                 System.out.println("ks1:Chaves Adicionadas");
-            }else{
+            }
+            else {
                 System.out.println("ks1:Chaves não Adicionadas");
             }
         });
 
-        ks.put(chaves).thenAccept((b) -> {
-            if(b){
+        ks.put(keys).thenAccept((b) -> {
+            if(b) {
                 System.out.println("ks1:Chaves Adicionadas2");
-            }else{
+            }
+            else {
                 System.out.println("ks1: Chaves não Adicionadas2");
             }
         });
 
-        ks.put(chaves).thenAccept((b) -> {
-            if(b){
+        ks.put(keys).thenAccept((b) -> {
+            if(b) {
                 System.out.println("ks2: Chaves Adicionadas");
-            }else{
+            }
+            else {
                 System.out.println("ks2: Chaves não Adicionadas");
             }
         });
 
-        ks.put(chaves).thenAccept((b) -> {
-            if(b){
+        ks.put(keys).thenAccept((b) -> {
+            if(b) {
                 System.out.println("ks2: Chaves Adicionadas2");
-            }else{
+            }
+            else {
                 System.out.println("ks2:  Chaves não Adicionadas2");
             }
         });

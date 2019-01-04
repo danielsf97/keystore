@@ -17,7 +17,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 
+
+/**
+ * Representa o coordenador do algoritmo de Two-Phase Commit.
+ *
+ * @param <T>
+ */
 public class Coordinator<T> {
+
+    // ***************************************************************************
+    // Variáveis
+    // ***************************************************************************
 
     private final Address[] addresses;
     private final Log<Object> log;
@@ -30,6 +40,19 @@ public class Coordinator<T> {
     private BiConsumer<Boolean, TwoPCTransaction> whenDone;
 
 
+    // ***************************************************************************
+    // Construtores
+    // ***************************************************************************
+
+
+    /**
+     * Construtor parametrizado de um coordenador.
+     * @param addresses     Endereços dos participantes.
+     * @param ms            Messaging service.
+     * @param whenDone
+     * @param name          Nome do log do coordenador
+     * @param es            Executor service.
+     */
     public Coordinator(Address[] addresses, ManagedMessagingService ms, BiConsumer<Boolean, TwoPCTransaction> whenDone, String name, ExecutorService es) {
 
         this.addresses = addresses;
@@ -60,7 +83,9 @@ public class Coordinator<T> {
 
 
 
-    /////////////////////////Restore///////////////////////////
+    // ***************************************************************************
+    // Restore
+    // ***************************************************************************
 
     private void restore() {
         HashMap<Integer, SimpleTwoPCTransaction> keys = new HashMap<>();
@@ -103,7 +128,9 @@ public class Coordinator<T> {
     }
 
 
-    /////////////////////////Phase1///////////////////////////
+    // ***************************************************************************
+    // Two-Phase Commit - Phase 1
+    // ***************************************************************************
 
     public void initProcess(int clientTxId, Address c, Map<Integer, T> separatedValues) {
 
@@ -182,9 +209,9 @@ public class Coordinator<T> {
     }
 
 
-
-    /////////////////////////Phase2///////////////////////////
-
+    // ***************************************************************************
+    // Two-Phase Commit - Phase 2
+    // ***************************************************************************
 
     private void initTPC2(TwoPCTransaction e) {
         Collection<Integer> participants =  e.getParticipants();
@@ -233,8 +260,9 @@ public class Coordinator<T> {
     }
 
 
-    /////////////////////////Abort////////////////////////////
-
+    // ***************************************************************************
+    // Abort
+    // ***************************************************************************
 
     private void initAbort(int txId) {
 
@@ -244,10 +272,10 @@ public class Coordinator<T> {
 
         e.lock();
 
-        if (e.getPhase() != Phase.ROLLBACKED && e.getPhase() != Phase.ABORT) {
+        if(e.getPhase() != Phase.ROLLBACKED && e.getPhase() != Phase.ABORT) {
 
             e.setPhase(Phase.ABORT);
-            whenDone.accept(false,e);
+            whenDone.accept(false, e);
             e.unlock();
 
             synchronized (log) {
@@ -299,9 +327,9 @@ public class Coordinator<T> {
     }
 
 
-    /////////////////////////SENDS////////////////////////////
-
-
+    // ***************************************************************************
+    // Send functions
+    // ***************************************************************************
 
     private void sendIterative(int pId, int txId, TwoPCProtocol.ControllerReq contReq, String type, Phase phase) {
         ms.sendAsync(addresses[pId], type, sp.encode(contReq));
