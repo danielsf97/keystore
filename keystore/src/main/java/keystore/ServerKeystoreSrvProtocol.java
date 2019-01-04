@@ -6,8 +6,18 @@ import tpc.TwoPCProtocol;
 import java.util.Collection;
 import java.util.Map;
 
+/**
+ * Define as mensagens trocadas entre o Server e o KeystoreSrv.
+ *
+ */
 public class ServerKeystoreSrvProtocol extends TwoPCProtocol {
 
+
+    /**
+     * Cria um Serializador para as mensagens entre o Server e o KeystoreSrv
+     *
+     * @return              Serializer das mensagens do protocolo 2PC
+     */
     public static Serializer newSerializer() {
         return Serializer.builder()
                 .withTypes(
@@ -16,6 +26,7 @@ public class ServerKeystoreSrvProtocol extends TwoPCProtocol {
                 )
                 .build();
     }
+
 
     /**
      * Representa o formato de serialização das mensagens utilizado nos pedidos
@@ -33,6 +44,7 @@ public class ServerKeystoreSrvProtocol extends TwoPCProtocol {
             this.keys = keys;
         }
     }
+
 
     /**
      * Representa o formato de serialização das mensagens utilizado nas respostas

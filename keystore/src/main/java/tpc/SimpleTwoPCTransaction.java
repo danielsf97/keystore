@@ -10,10 +10,20 @@ import java.util.Map;
  *
  */
 class SimpleTwoPCTransaction<T> {
+
+    // ***************************************************************************
+    // Variáveis
+    // ***************************************************************************
+
     Integer id;
     Integer clientId;
     Integer clientAddress;
     Map<Integer, T> participantsToT;
+
+
+    // ***************************************************************************
+    // Construtores
+    // ***************************************************************************
 
     /**
      * Construtor parametrizado para o SimpleTransaction.
@@ -29,5 +39,4 @@ class SimpleTwoPCTransaction<T> {
         this.clientAddress = clientAddress.port();
         this.participantsToT = participantsToT;
     }
-
 }
