@@ -49,7 +49,7 @@ public class Coordinator<T> {
      * Construtor parametrizado de um coordenador.
      * @param addresses     Endereços dos participantes.
      * @param ms            Messaging service.
-     * @param whenDone
+     * @param whenDone      Corresponde à ação a executar quando é conhecido o resultado da transação.
      * @param name          Nome do log do coordenador
      * @param es            Executor service.
      */
@@ -87,6 +87,9 @@ public class Coordinator<T> {
     // Restore
     // ***************************************************************************
 
+    /**
+     * Função que realiza a recuperação do coordenador em caso de falha.
+     */
     private void restore() {
         HashMap<Integer, SimpleTwoPCTransaction> keys = new HashMap<>();
         HashMap<Integer,String> phases = new HashMap<>();
@@ -132,11 +135,20 @@ public class Coordinator<T> {
     // Two-Phase Commit - Phase 1
     // ***************************************************************************
 
-    public void initProcess(int clientTxId, Address c, Map<Integer, T> separatedValues) {
+    /**
+     * Função responsável por dar inicío ao protocolo de 2PC. É criado um registo no Log
+     * referente à transação e um registo no mapa das transações ativas. Invoca a função
+     * que inicia a fase 1 do protocolo.
+     *
+     * @param clientTxId        Identificador da transação no contexto do cliente.
+     * @param address           Endereço do Cliente.
+     * @param separatedValues   Mapa dos diferentes dados da transação separados pelo participante a que se destina.
+     */
+    public void initProcess(int clientTxId, Address address, Map<Integer, T> separatedValues) {
 
         int txId = nextTxId.incrementAndGet();
 
-        TwoPCTransaction tx = new TwoPCTransaction(txId, clientTxId, c);
+        TwoPCTransaction tx = new TwoPCTransaction(txId, clientTxId, address);
 
         this.currentTransactionsGlobalLock.lock();
         this.currentTransactions.put(txId, tx);
@@ -152,8 +164,16 @@ public class Coordinator<T> {
 
         initTPC1(tx.getId(), separatedValues);
     }
-    
-    
+
+    /**
+     * Função responsável por dar inicío à fase 1 protocolo 2PC. Envia os diferentes
+     * dados para cada participante e aguarda 15 segundos, que é o tempo máximo que um
+     * participante tem para responder como se encontrando preparado para a transação.
+     * Aborta caso contrário.
+     *
+     * @param txId              Identificador único da transação.
+     * @param separatedValues   Mapa dos diferentes dados da transação separados pelo participante a que se destina.
+     */
     private void initTPC1(int txId, Map<Integer, T> separatedValues) {
 
         for(Map.Entry<Integer, T> ksValues : separatedValues.entrySet()) {
@@ -180,7 +200,14 @@ public class Coordinator<T> {
         }, 15, TimeUnit.SECONDS);
     }
 
-
+    /**
+     * Função responsável por processar uma mensagem de resposta a um pedido de Prepared, recebida
+     * de um determinado participante e referente a uma determinada transação. Verifica se os
+     * participantes já se encontram todos preparados para a transação, iniciando a segunda fase do
+     * protocolo 2PC em caso afirmativo.
+     *
+     * @param m         mensagem recebida no respetivo formato de serialização.
+     */
     private void processTPC1(byte[] m) {
         TwoPCProtocol.ControllerPreparedResp rp = sp.decode(m);
 
@@ -213,6 +240,13 @@ public class Coordinator<T> {
     // Two-Phase Commit - Phase 2
     // ***************************************************************************
 
+    /**
+     * Função responsável por dar inicío à fase 2 do protocolo 2PC. Envia pedidos
+     * de commit aos participantes de forma iterativa até que a transação tenha
+     * sido confirmada.
+     *
+     * @param e     Transação à qual se dará inicio a segunda fase do protocolo.
+     */
     private void initTPC2(TwoPCTransaction e) {
         Collection<Integer> participants =  e.getParticipants();
         int txId = e.getId();
@@ -226,7 +260,14 @@ public class Coordinator<T> {
         }
     }
 
-
+    /**
+     * Função responsável por processar uma mensagem de resposta a um pedido de Commit, recebida
+     * de um determinado participante e referente a uma determinada transação. Verifica se a transação
+     * existe e não for abortada. Caso todos os participantes já tenham confirmado a transação, a
+     * transação é declarada como confirmada, estando pronta para a resposta ser devolvida.
+     *
+     * @param m         mensagem recebida no respetivo formato de serialização.
+     */
     private void processTPC2(byte[] m) {
         TwoPCProtocol.ControllerCommittedResp rp = sp.decode(m);
 
@@ -264,6 +305,13 @@ public class Coordinator<T> {
     // Abort
     // ***************************************************************************
 
+    /**
+     * Função responsável por dar inicío ao abort de uma transação. Envia pedidos
+     * de abort aos participantes de forma iterativa até que a transação tenha
+     * sido retrocedida.
+     *
+     * @param txId     Identificador único da transação.
+     */
     private void initAbort(int txId) {
 
         currentTransactionsGlobalLock.lock();
@@ -293,7 +341,13 @@ public class Coordinator<T> {
         else e.unlock();
     }
 
-
+    /**
+     * Função responsável realizar o devido processamento de receção de uma resposta
+     * a um pedido de abort de transação. Dá a transação como retrocedida se todos
+     * os participantes já tenham respondido ao pedido respetivo.
+     *
+     * @param bytes     Mensagem recebida serializada.
+     */
     private void processAbortResp(byte[] bytes) {
         TwoPCProtocol.ControllerAbortResp rp = sp.decode(bytes);
 
@@ -331,6 +385,16 @@ public class Coordinator<T> {
     // Send functions
     // ***************************************************************************
 
+    /**
+     * Função que envia periodicamente (5 em 5 segundos) uma mensagem a um determinado
+     * participante a fim de o colocar numa determinada fase no contexto da transação.
+     *
+     * @param pId           Identificador do participante.
+     * @param txId          Identificador único da transação.
+     * @param contReq       Pedido a ser realizado.
+     * @param type          Tipo do pedido.
+     * @param phase         Fase do participante que se espera obter com o pedido
+     */
     private void sendIterative(int pId, int txId, TwoPCProtocol.ControllerReq contReq, String type, Phase phase) {
         ms.sendAsync(addresses[pId], type, sp.encode(contReq));
 

@@ -9,7 +9,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
- * Representa uma transação contexto do algoritmo de Two-Phase Commit.
+ * Representa uma transação no contexto do algoritmo de Two-Phase Commit.
  *
  */
 public class TwoPCTransaction {
@@ -31,6 +31,13 @@ public class TwoPCTransaction {
     // Construtores
     // ***************************************************************************
 
+    /**
+     * Construtor de uma transação no contexto do algoritmo de Two-Phase Commit.
+     *
+     * @param id            Identificaro único da transação.
+     * @param clientTxId    Identificador da transação no contexto do cliente.
+     * @param address       Endereço do clinte.
+     */
     public TwoPCTransaction(Integer id, Integer clientTxId, Address address) {
         this.id = id;
         this.clientTxId = clientTxId;
@@ -40,6 +47,12 @@ public class TwoPCTransaction {
         this.lock = new ReentrantLock();
     }
 
+    /**
+     * Construtor de uma transação no contexto do algoritmo de Two-Phase Commit.
+     *
+     * @param tx        Formato da mesma transação quando inserida no log do coordenador.
+     * @param phase     Fase que inicializa esta transação.
+     */
     TwoPCTransaction(SimpleTwoPCTransaction tx, Phase phase) {
         this.id = tx.id;
         this.clientTxId = tx.clientId;
@@ -129,6 +142,12 @@ public class TwoPCTransaction {
         }
     }
 
+    /**
+     * Altera o estado(fase) do particiante para com a transação.
+     *
+     * @param participant       Identificador do participante.
+     * @param resp              Fase a atribuir ao participante.
+     */
     public void setParticipantStatus(Integer participant, Phase resp) {
         participantsStatus.put(participant, resp);
     }

@@ -14,7 +14,9 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-
+/**
+ * Representa um Servidor de Chaves(Backend).
+ */
 public class KeystoreSrv {
 
     private static final Address[] addresses = new Address[] {
@@ -31,6 +33,11 @@ public class KeystoreSrv {
     private final Map<Long, byte[]> data;
     private static Serializer s;
 
+    /**
+     * Cria um Servidor de Chaves(Backend).
+     *
+     * @param id    Identificador do Servidor de Chaves.
+     */
     private KeystoreSrv(int id) {
         ExecutorService es = Executors.newFixedThreadPool(3);
         this.ms = NettyMessagingService.builder()
@@ -60,9 +67,13 @@ public class KeystoreSrv {
         ms.start();
     }
 
-
-
-
+    /**
+     * Função que processa um pedido get vindo do servidor. Verifica a existência de cada
+     * uma das chaves e envia uma mensagem ao servidor com todas as chaves encontradas.
+     *
+     * @param address        Endereço do Servidor.
+     * @param m              Mensagem do pedido recebido.
+     */
     private void get(Address address, byte[] m) {
         ServerKeystoreSrvProtocol.GetControllerReq prepReq = s.decode(m);
         Collection<Long> keys = prepReq.keys;
@@ -77,7 +88,12 @@ public class KeystoreSrv {
         ms.sendAsync(address, ServerKeystoreSrvProtocol.GetControllerResp.class.getName(),s.encode(resp));
     }
 
-
+    /**
+     * Função que permite obter locks para um conjunto de chaves.
+     *
+     * @param keys      Coleção de Chaves às quais se pretende obter lock.
+     * @return          CompletableFuture que fica completo quando todos os locks forem obtidos.
+     */
     private CompletableFuture<Void> getLocks(TreeSet<Long> keys) {
 
         this.keyLocksGlobalLock.lock();
@@ -111,7 +127,13 @@ public class KeystoreSrv {
         return CompletableFuture.allOf(ready);
     }
 
-
+    /**
+     * Função que permite libertar todos os locks de um conjunto de chaves em caso de
+     * uma transação abortar. Difere do releaseLocks na medida em que se era a primeira
+     * vez que determinadas chaves iam ser inseridas, tem inclusivé de eliminar os locks criados.
+     *
+     * @param keys      Chaves cujos locks a libertar.
+     */
     private void releaseLocksAbort(Map<Long,byte[]> keys) {
 
         this.keyLocksGlobalLock.lock();
@@ -142,6 +164,12 @@ public class KeystoreSrv {
         this.keyLocksGlobalLock.unlock();
     }
 
+    /**
+     * Função que permite libertar todos os locks de um conjunto de chaves após o
+     * término de uma transação.
+     *
+     * @param keys      Chaves cujos locks a libertar.
+     */
     private void releaseLocks(Map<Long,byte[]> keys) {
         this.keyLocksGlobalLock.lock();
 
@@ -160,6 +188,9 @@ public class KeystoreSrv {
 
     }
 
+    /**
+     * Função principal do programa que cria um determinado servidor de chaves.
+     */
     public static void main(String[] args) {
         int id = Integer.parseInt(args[0]);
         new KeystoreSrv(id);

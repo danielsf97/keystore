@@ -17,6 +17,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 
+/**
+ * Representa um Servidor principal.
+ */
 public class Server {
 
     private static final Address[] addresses = new Address[] {
@@ -36,7 +39,9 @@ public class Server {
     private Coordinator<Map<Long, byte[]>> coordinator;
     private ManagedMessagingService ms;
 
-
+    /**
+     * Construtor parametrizado do Servidor.
+     */
     private Server() {
         ExecutorService es = Executors.newSingleThreadExecutor();
 
@@ -92,6 +97,11 @@ public class Server {
 
     /////////////////////////GET///////////////////////////
 
+    /**
+     * Função que processa a resposta a um pedido get por parte de um servidor de chaves.
+     *
+     * @param m     mensagem de resposta serializada
+     */
     private void processGetResp(byte[] m) {
         ServerKeystoreSrvProtocol.GetControllerResp rp = sp.decode(m);
 
@@ -121,7 +131,13 @@ public class Server {
         }
     }
 
-
+    /**
+     * Função que processa um pedido get, fazendo a divisão das chaves pelos participantes
+     * e dando inicio ao processo de atendimento do pedido
+     *
+     * @param tx        Transação criada para o pedido get em questão.
+     * @param req       Mensagem do pedido recebido.
+     */
     private void processGetReq(Transaction tx, KeystoreProtocol.GetReq req) {
         Collection<Long> keys = req.keys;
         Map<Integer, Collection<Long>> separatedValues = valuesSeparator(keys);
@@ -129,6 +145,12 @@ public class Server {
         initGet(tx.getId(), separatedValues);
     }
 
+    /**
+     * Função que realiza a separação das Chaves incluidas num pedido get pelo servidores de chaves.
+     *
+     * @param keys      Coleção com os identificadores das chaves requeridas.
+     * @return          Mapa com a divisão das chaves pelos servidores de chaves.
+     */
     private Map<Integer,Collection<Long>> valuesSeparator(Collection<Long> keys) {
         Map<Integer, Collection<Long>> res = new HashMap<>();
         for(Long key : keys) {
@@ -142,7 +164,14 @@ public class Server {
     }
 
 
-
+    /**
+     * Função que dá inicio ao atendimento do pedido get propriamente dito, enviando as mensagens
+     * para cada um dos servidores de chaves respetivos, e que periodicamente confirma se todos os
+     * servidores de chaves já responderam, retornando a resposta ao participante em caso afirmativo
+     *
+     * @param txId                  Identificador da transação do pedido get.
+     * @param separatedValues       Map da divisão das chaves pelos servidores de chaves.
+     */
     private void initGet(int txId, Map<Integer, Collection<Long>> separatedValues) {
 
         for (Map.Entry<Integer, Collection<Long>> ksValues : separatedValues.entrySet()) {
@@ -176,7 +205,12 @@ public class Server {
 
     /////////////////////////PUT///////////////////////////
 
-
+    /**
+     * Função que realiza a separação das Chaves incluidas num pedido put pelo participantes.
+     *
+     * @param values      Mapa de Chave-Valor de um pedido put.
+     * @return            Mapa com a divisão das chaves pelos participantes.
+     */
     private Map<Integer, Map<Long,byte[]>> valuesSeparator(Map<Long,byte[]> values) {
         Map<Integer, Map<Long, byte []>> res = new TreeMap<>();
         for(Map.Entry<Long, byte []> value: values.entrySet()) {
@@ -189,6 +223,9 @@ public class Server {
         return res;
     }
 
+    /**
+     * Função principal que cria um servidor.
+     */
     public static void main(String[] args) {
         new Server();
     }

@@ -13,7 +13,7 @@ import java.util.concurrent.*;
 
 /**
  * Representa uma keystore distribuída, permitindo ao cliente
- * obter e color pares chave-valor na mesma.
+ * obter e colocar pares chave-valor na mesma.
  *
  */
 public class KeystoreCli implements Keystore {
@@ -39,7 +39,7 @@ public class KeystoreCli implements Keystore {
      * Construtor parametrizado para o KeystoreCli.
      *
      * @param port          Porta onde está a correr o servidor.
-     * @throws Exception    TODO:
+     * @throws Exception
      */
     KeystoreCli(int port) throws Exception {
         this.i = 0;

@@ -11,6 +11,11 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+/**
+ * Representa um participante do algoritmo de Two-Phase Commit.
+ *
+ * @param <T>
+ */
 public class Participant<T> {
 
     // ***************************************************************************
@@ -36,6 +41,16 @@ public class Participant<T> {
     // Construtores
     // ***************************************************************************
 
+    /**
+     * Construtor parametrizado de um participante.
+     * @param id            Endereços dos participantes.
+     * @param ms            Messaging service.
+     * @param name          Nome do log do coordenador.
+     * @param prepare       Corresponde ao que é necessário fazer para o participante
+     *                          se encontrar preparado para a transação.
+     * @param commit        Corresponde ao que efetuar no momento do commit.
+     * @param abort         Corresponde ao que efetuar em caso de abort da transação.
+     */
     public Participant(int id, ManagedMessagingService ms, ExecutorService es, String name, Function<T,CompletableFuture<Void>> prepare, Consumer<T> commit, Consumer<T> abort) {
         this.myId = id;
         this.ms = ms;
@@ -63,6 +78,9 @@ public class Participant<T> {
     // Restore
     // ***************************************************************************
 
+    /**
+     * Função que realiza a recuperação de um participante em caso de falha.
+     */
     private void restore() {
         
         HashMap<Integer, T> transKeys = new HashMap<>();
@@ -102,6 +120,12 @@ public class Participant<T> {
     // Abort
     // ***************************************************************************
 
+    /**
+     * Função responsável por processar um pedido de abort da transação vindo do servidor.
+     *
+     * @param address      Endereço do servidor.
+     * @param bytes        Mensagem de pedido de abort no formato serializado.
+     */
     private void abort(Address address, byte[] bytes) {
         TwoPCProtocol.ControllerAbortReq ab = s.decode(bytes);
         int transId = ab.txId;
@@ -138,6 +162,13 @@ public class Participant<T> {
     // Two-Phase Commit - Phase 1
     // ***************************************************************************
 
+    /**
+     * Função responsável por processar uma mensagem do tipo Prepared vinda do servidor.
+     * Na maioria dos casos dando início à primeira fase do protocolo 2PC.
+     *
+     * @param address      Endereço do servidor.
+     * @param m            Mensagem correspondente ao pedido de Prepared por parte do servidor.
+     */
     private void phase1(Address address, byte[] m) {
         TwoPCProtocol.ControllerPreparedReq prepReq = s.decode(m);
         int transId = prepReq.txId;
@@ -186,6 +217,13 @@ public class Participant<T> {
     // Two-Phase Commit - Phase 2
     // ***************************************************************************
 
+    /**
+     * Função responsável por processar uma mensagem do tipo Commit vinda do servidor.
+     * Na maioria dos casos dando início à segunda fase do protocolo 2PC, ou seja à fase de commit.
+     *
+     * @param address      Endereço do servidor.
+     * @param m            Mensagem correspondente ao pedido de Commit por parte do servidor.
+     */
     private void phase2(Address address, byte[] m) {
         TwoPCProtocol.ControllerCommitReq commitReq = s.decode(m);
         int transId = commitReq.txId;
