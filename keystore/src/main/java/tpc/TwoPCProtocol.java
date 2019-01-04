@@ -15,7 +15,7 @@ public class TwoPCProtocol{
      * @return              Serializer das mensagens do protocolo 2PC
      */
 
-    public static Serializer newSerializer() {
+    static Serializer newSerializer() {
         return Serializer.builder()
                 .withTypes(
                         TwoPCProtocol.ControllerReq.class,
@@ -35,10 +35,10 @@ public class TwoPCProtocol{
      * a pedidos do coordenador aos participantes no protocolo 2PC
      *
      */
-    public static class ControllerReq{
-        public int txId;
-        public int pId;
-        public ControllerReq(int txId, int pId){
+    static class ControllerReq{
+        int txId;
+        int pId;
+        ControllerReq(int txId, int pId){
             this.txId = txId;
             this.pId = pId;
         }
@@ -49,9 +49,9 @@ public class TwoPCProtocol{
      * de Prepared, do coordenador para os participantes
      *
      */
-    public static class ControllerPreparedReq <T> extends ControllerReq{
-        public T values;
-        public ControllerPreparedReq(int txId, int pId, T values){
+    static class ControllerPreparedReq <T> extends ControllerReq{
+        T values;
+        ControllerPreparedReq(int txId, int pId, T values){
             super(txId,pId);
             this.values = values;
         }
@@ -62,8 +62,8 @@ public class TwoPCProtocol{
      * de Commit da transação, do coordenador para os participantes
      *
      */
-    public static class ControllerCommitReq extends ControllerReq{
-        public ControllerCommitReq(int txId, int pId){
+    static class ControllerCommitReq extends ControllerReq{
+        ControllerCommitReq(int txId, int pId){
             super(txId,pId);
         }
     }
@@ -73,8 +73,8 @@ public class TwoPCProtocol{
      * de abort da transação, do coordenador para os participantes
      *
      */
-    public static class ControllerAbortReq extends ControllerReq{
-        public ControllerAbortReq(int txId, int pId){
+    static class ControllerAbortReq extends ControllerReq{
+        ControllerAbortReq(int txId, int pId){
             super(txId,pId);
         }
     }
@@ -84,10 +84,10 @@ public class TwoPCProtocol{
      *  aos pedidos do coordenador para os  participantes no protocolo 2PC
      *
      */
-    public static class ControllerResp{
-        public int txId;
-        public int pId;
-        public ControllerResp(int txId, int pId){
+    static class ControllerResp{
+        int txId;
+        int pId;
+        ControllerResp(int txId, int pId){
             this.txId = txId;
             this.pId = pId;
         }
@@ -98,8 +98,8 @@ public class TwoPCProtocol{
      * aos pedidos de Prepared, dos participantes para o coordenador
      *
      */
-    public static class ControllerPreparedResp extends ControllerResp{
-        public ControllerPreparedResp(int txId, int pId){
+    static class ControllerPreparedResp extends ControllerResp{
+        ControllerPreparedResp(int txId, int pId){
             super(txId,pId);
         }
     }
@@ -109,8 +109,8 @@ public class TwoPCProtocol{
      * aos pedidos de Commit da transação, dos participantes para o coordenador
      *
      */
-    public static class ControllerCommittedResp extends ControllerResp{
-        public ControllerCommittedResp(int txId, int pId){
+    static class ControllerCommittedResp extends ControllerResp{
+        ControllerCommittedResp(int txId, int pId){
             super(txId,pId);
         }
     }
@@ -120,8 +120,8 @@ public class TwoPCProtocol{
      * aos pedidos de abort de transação, dos participantes para o coordenador
      *
      */
-    public static class ControllerAbortResp extends ControllerResp{
-        public ControllerAbortResp(int txId, int pId){
+    static class ControllerAbortResp extends ControllerResp{
+        ControllerAbortResp(int txId, int pId){
             super(txId,pId);
         }
     }

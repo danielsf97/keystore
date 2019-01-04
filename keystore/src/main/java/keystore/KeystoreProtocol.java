@@ -11,14 +11,14 @@ import java.util.Map;
  * (pedidos e respostas PUT/GET) e permite criar um serializer para as classes definidas
  *
  */
-public class KeystoreProtocol {
+class KeystoreProtocol {
 
     /**
      * Cria um Serializador para as mensagens entre Cliente e Servidor
      *
      * @return              Serializer das mensagens Cliente-Servidor
      */
-    public static Serializer newSerializer() {
+    static Serializer newSerializer() {
         return Serializer.builder()
                 .withTypes(
                         KeystoreProtocol.PutReq.class,
@@ -33,10 +33,10 @@ public class KeystoreProtocol {
      * put do cliente para o servidor
      *
      */
-    public static class PutReq {
+    static class PutReq {
         int txId;
         Map<Long,byte[]> values;
-        public PutReq(Map<Long,byte[]> values, int txId) {
+        PutReq(Map<Long, byte[]> values, int txId) {
             this.values = values;
             this.txId = txId;
         }
@@ -47,10 +47,10 @@ public class KeystoreProtocol {
      * dos pedidos put do servidor para o cliente
      *
      */
-    public static class PutResp {
+    static class PutResp {
         int txId;
         boolean state;
-        public PutResp(boolean state, int txId) {
+        PutResp(boolean state, int txId) {
             this.state = state;this.txId=txId;
         }
     }
@@ -60,10 +60,10 @@ public class KeystoreProtocol {
      * get do cliente para o servidor
      *
      */
-    public static class GetReq {
+    static class GetReq {
         int txId;
         Collection<Long> keys;
-        public GetReq(Collection<Long> keys, int txId) {
+        GetReq(Collection<Long> keys, int txId) {
             this.keys = keys;
             this.txId = txId;
         }
@@ -74,10 +74,10 @@ public class KeystoreProtocol {
      * dos pedidos get do servidor para o cliente
      *
      */
-    public static class GetResp {
+    static class GetResp {
         int txId;
         Map<Long, byte[]> values;
-        public GetResp(Map<Long, byte[]> values, int txId) {
+        GetResp(Map<Long, byte[]> values, int txId) {
             this.values = values;
             this.txId = txId;
         }

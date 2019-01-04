@@ -4,6 +4,7 @@ import io.atomix.cluster.messaging.ManagedMessagingService;
 import io.atomix.cluster.messaging.impl.NettyMessagingService;
 import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Serializer;
+import tpc.Phase;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -56,7 +57,6 @@ public class KeystoreCli implements Keystore {
 
         ms.registerHandler(KeystoreProtocol.PutResp.class.getName(), (o, m) -> {
             KeystoreProtocol.PutResp putResp = s.decode(m);
-            System.out.println("RESPONSE");
             if (put_requests.containsKey(putResp.txId)) {
                 put_requests.remove(putResp.txId).complete(putResp.state);
             }
@@ -64,9 +64,9 @@ public class KeystoreCli implements Keystore {
 
         ms.registerHandler(KeystoreProtocol.GetResp.class.getName(), (o, m) -> {
             KeystoreProtocol.GetResp getResp = s.decode(m);
-
-            get_requests.remove(getResp.txId).complete(getResp.values);
-
+            if (get_requests.containsKey(getResp.txId)) {
+                get_requests.remove(getResp.txId).complete(getResp.values);
+            }
         }, es);
 
         ms.start().get();
@@ -84,7 +84,6 @@ public class KeystoreCli implements Keystore {
      * @param values        Map cujas entradas correspondem aos pares chave-valor.
      * @return              Booleano indicativo do sucesso (true) ou insucesso
      *                      (false) da operação.
-     * @throws Exception    TODO:
      */
     @Override
     public CompletableFuture<Boolean> put(Map<Long, byte[]> values) {
@@ -121,7 +120,6 @@ public class KeystoreCli implements Keystore {
      *                      respetivos valores.
      * @return              Map cujas entradas correspondem aos pares chave-valor
      *                      das chaves providenciadas.
-     * @throws Exception    TODO:
      */
     @Override
     public CompletableFuture<Map<Long, byte[]>> get(Collection<Long> keys) {
@@ -130,6 +128,24 @@ public class KeystoreCli implements Keystore {
 
         CompletableFuture<Map<Long, byte[]>> cp = new CompletableFuture<>();
         get_requests.put(i, cp);
+
+        int id = i;
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        scheduler.schedule(() -> {
+            if (!cp.isDone()) {
+                try {
+
+                    get_requests.remove(id).complete(null);
+
+
+                    throw new TimeoutException("Não conseguiu efetuar o pedido de get");
+
+                } catch (TimeoutException e) {
+                   e.printStackTrace();
+                }
+            }
+
+        }, 15, TimeUnit.SECONDS);
 
         i++;
 

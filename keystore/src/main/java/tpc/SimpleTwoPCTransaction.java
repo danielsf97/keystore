@@ -21,7 +21,7 @@ class SimpleTwoPCTransaction<T> {
      * @param id                    Identificador único da transação no Servidor.
      * @param clientId              Identificador único da transação no Cliente.
      * @param clientAddress         Endereço do cliente
-     * @param participantsToKeys    Mapa de associação dos servidores particiantes e chaves a armazenar
+     * @param participantsToT       Mapa de associação dos servidores participantes e chaves a armazenar
      */
     SimpleTwoPCTransaction(Integer id, Integer clientId, Address clientAddress, Map<Integer, T> participantsToT){
         this.id = id;

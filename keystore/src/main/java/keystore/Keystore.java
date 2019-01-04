@@ -18,9 +18,8 @@ public interface Keystore {
      *
      * @param values        Map cujas entradas correspondem aos pares chave-valor.
      * @return              Booleano indicativo do sucesso (true) ou insucesso (false) da operação.
-     * @throws Exception    TODO:
      */
-    CompletableFuture<Boolean> put (Map<Long, byte[]> values) throws  Exception;
+    CompletableFuture<Boolean> put (Map<Long, byte[]> values);
 
 
     /**
@@ -29,7 +28,6 @@ public interface Keystore {
      *
      * @param keys          Conjunto de chaves para as quais se pretende obter os respetivos valores.
      * @return              Map cujas entradas correspondem aos pares chave-valor das chaves providenciadas.
-     * @throws Exception    TODO:
      */
-    CompletableFuture<Map <Long, byte[]>> get (Collection<Long> keys) throws Exception;
+    CompletableFuture<Map <Long, byte[]>> get (Collection<Long> keys);
 }

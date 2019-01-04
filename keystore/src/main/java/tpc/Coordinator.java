@@ -31,7 +31,7 @@ public class Coordinator<T> {
     private static AtomicInteger nextTxId;
 
     private BiConsumer<Boolean,TwoPCTransaction> whenDone;
-    private Log<Object> log;
+    private final Log<Object> log;
 
 
     public Coordinator(Address[] addresses, ManagedMessagingService ms, BiConsumer<Boolean,TwoPCTransaction> whenDone, String name, ExecutorService es) {
@@ -127,8 +127,10 @@ public class Coordinator<T> {
 
         tx.setParticipants(separatedValues.keySet());
         SimpleTwoPCTransaction<T> simpleTx = new SimpleTwoPCTransaction<>(tx.getId(),tx.get_client_txId(),tx.getAddress(),separatedValues);
-        log.write(tx.getId(),simpleTx);
-        log.write(tx.getId(),Phase.STARTED.toString());
+        synchronized (log) {
+            log.write(tx.getId(), simpleTx);
+            log.write(tx.getId(), Phase.STARTED.toString());
+        }
         initTPC1(tx.getId(), separatedValues);
     }
     
@@ -137,11 +139,30 @@ public class Coordinator<T> {
 
         for (Map.Entry<Integer, T> ksValues : separatedValues.entrySet()) {
             int pId = ksValues.getKey();
+            System.out.println("Sending participante"+ pId);
             TwoPCProtocol.ControllerPreparedReq<T> contReq = new TwoPCProtocol.ControllerPreparedReq<>(txId, pId, ksValues.getValue());
             String type = TwoPCProtocol.ControllerPreparedReq.class.getName();
-            send_iteractive(pId,txId,contReq,type);
-
+            ms.sendAsync(addresses[pId],
+                    type,
+                    sp.encode(contReq));
         }
+
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        scheduler.schedule(()->{
+            System.out.println("CHECKING");
+            currentTransactionsGlobalLock.lock();
+            TwoPCTransaction e = currentTransactions.get(txId);
+            currentTransactionsGlobalLock.unlock();
+
+            e.lock();
+            if (!e.checkParticipantsPhases(Phase.PREPARED)) {
+                System.out.println("CHECKING ABORT");
+                e.unlock();
+
+                initAbort(txId);
+            }
+            else e.unlock();
+        }, 15, TimeUnit.SECONDS);
     }
 
 
@@ -161,14 +182,8 @@ public class Coordinator<T> {
                 whenDone.accept(true,e);
                 e.unlock();
 
-                log.write(rp.txId,Phase.PREPARED.toString());
-
-
-                System.out.println("Init Commit");
-                try {
-                    Thread.sleep(5000);
-                } catch (InterruptedException e1) {
-                    e1.printStackTrace();
+                synchronized (log) {
+                    log.write(rp.txId, Phase.PREPARED.toString());
                 }
                 initTPC2(e);
             }else e.unlock();
@@ -187,7 +202,7 @@ public class Coordinator<T> {
             TwoPCProtocol.ControllerCommitReq contReq = new TwoPCProtocol.ControllerCommitReq(txId, pId);
             String type = TwoPCProtocol.ControllerCommitReq.class.getName();
 
-            send_iteractive2(pId,txId,contReq,type, Phase.COMMITTED);
+            send_iteractive(pId,txId,contReq,type, Phase.COMMITTED);
 
         }
     }
@@ -214,7 +229,9 @@ public class Coordinator<T> {
                     currentTransactions.remove(rp.txId);
                     this.currentTransactionsGlobalLock.unlock();
 
-                    log.write(rp.txId, Phase.COMMITTED.toString());
+                    synchronized (log) {
+                        log.write(rp.txId, Phase.COMMITTED.toString());
+                    }
                     System.out.println("Done");
                 }else e.unlock();
             }else e.unlock();
@@ -241,16 +258,17 @@ public class Coordinator<T> {
             whenDone.accept(false,e);
             e.unlock();
 
-            log.write(txId, Phase.ABORT.toString());
-
+            synchronized (log) {
+                log.write(txId, Phase.ABORT.toString());
+            }
 
 
 
             String type = TwoPCProtocol.ControllerAbortReq.class.getName();
             for (Integer pId : e.getParticipants()) {
                 TwoPCProtocol.ControllerAbortReq abortt = new TwoPCProtocol.ControllerAbortReq(txId, pId);
-                ms.sendAsync(addresses[pId], type, sp.encode(abortt));
-                send_iteractive2(pId, txId, abortt, type, Phase.ROLLBACKED);
+
+                send_iteractive(pId, txId, abortt, type, Phase.ROLLBACKED);
             }
         }else{
             e.unlock();
@@ -282,8 +300,9 @@ public class Coordinator<T> {
                     this.currentTransactionsGlobalLock.unlock();
                     System.out.println("All prepared for tx:" + e.getId());
 
-                    log.write(rp.txId, Phase.ROLLBACKED.toString());
-
+                    synchronized (log) {
+                        log.write(rp.txId, Phase.ROLLBACKED.toString());
+                    }
                     System.out.println("ABOOOOOOOOOOORRRTTTTTTTTTTTEEDDD");
                 }else e.unlock();
             }else e.unlock();
@@ -297,31 +316,8 @@ public class Coordinator<T> {
     /////////////////////////SENDS////////////////////////////
 
 
-    private void send_iteractive(int pId, int txId, TwoPCProtocol.ControllerReq contReq, String type){
-        ms.sendAsync(addresses[pId],
-                type,
-                sp.encode(contReq));
 
-        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-        scheduler.schedule(()->{
-            System.out.println("CHECKING");
-            currentTransactionsGlobalLock.lock();
-            TwoPCTransaction e = currentTransactions.get(txId);
-            currentTransactionsGlobalLock.unlock();
-
-            e.lock();
-            if (e.getParticipantStatus(pId) == Phase.STARTED) {
-                System.out.println("CHECKING ABORT");
-                e.unlock();
-
-                initAbort(txId);
-            }
-            else e.unlock();
-        }, 15, TimeUnit.SECONDS);
-    }
-
-
-    private void send_iteractive2(int pId, int txId, TwoPCProtocol.ControllerReq contReq, String type, Phase phase){
+    private void send_iteractive(int pId, int txId, TwoPCProtocol.ControllerReq contReq, String type, Phase phase){
         ms.sendAsync(addresses[pId],
                 type,
                 sp.encode(contReq));

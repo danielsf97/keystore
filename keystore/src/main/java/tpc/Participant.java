@@ -132,9 +132,13 @@ public class Participant<T> {
 
 
     private void phase1(Address address, byte[] m){
-        System.out.println("PUT in keystore");
         TwoPCProtocol.ControllerPreparedReq prepReq = s.decode(m);
         int trans_id = prepReq.txId;
+
+
+        System.out.println("PUT in keystore:tx"+trans_id);
+
+
         boolean pendentPutsContainsKey;
         synchronized (pendentTransactions){
             pendentPutsContainsKey = pendentTransactions.containsKey(trans_id);
@@ -160,6 +164,7 @@ public class Participant<T> {
                     synchronized (pendentTransactions) {
                         pendentTransactions.put(trans_id, values);
                     }
+
                     this.runningTransactionsGlobalLock.unlock();
                     log.write(trans_id, values);
                     log.write(trans_id, Phase.PREPARED.toString());
@@ -213,10 +218,11 @@ public class Participant<T> {
         }
         else {
 
+            System.out.println("Transaction " + trans_id + " commited!!");
+
             commit.accept(pendentKeys);
 
             log.write(trans_id, Phase.COMMITTED.toString());
-            System.out.println("Transaction " + trans_id + " commited!!");
             TwoPCProtocol.ControllerCommittedResp p = new TwoPCProtocol.ControllerCommittedResp(trans_id,myId);
             ms.sendAsync(address, TwoPCProtocol.ControllerCommittedResp.class.getName(),s.encode(p));
         }

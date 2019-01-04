@@ -7,6 +7,7 @@ import io.atomix.utils.serializer.Serializer;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.TreeMap;
 
 
 /**
@@ -14,7 +15,7 @@ import java.util.List;
  *
  * @param <T> TIpo de entrada no log
  */
-public class Log<T> {
+class Log<T> {
 
     /**
      * Representa uma entrada no log.
@@ -61,7 +62,7 @@ public class Log<T> {
          *
          * @return  o ID de uma entrada.
          */
-        public int getTrans_id() {
+        int getTrans_id() {
             return trans_id;
         }
 
@@ -70,7 +71,7 @@ public class Log<T> {
          *
          * @return o conteúdo de uma entrada.
          */
-        public T getAction() {
+         T getAction() {
             return action;
         }
 
@@ -108,10 +109,11 @@ public class Log<T> {
      *
      * @param name Nome do log.
      */
-    public Log(String name) {
+     Log(String name) {
         Serializer s = Serializer.builder()
                 .withTypes(LogEntry.class)
                 .withTypes(SimpleTwoPCTransaction.class)
+                .withTypes(TreeMap.class)
                 .build();
 
 
@@ -135,7 +137,7 @@ public class Log<T> {
      * @param transId   Identificador da entrada.
      * @param action    Conteúdo da entrada no log.
      */
-    public synchronized void write(int transId, T action) {
+     synchronized void write(int transId, T action) {
         w = j.writer();
         w.append(new Log.LogEntry<Object>(transId, action));
         w.flush();
@@ -148,7 +150,7 @@ public class Log<T> {
      *
      * @return          Lista de entradas do log.
      */
-    public List<LogEntry> read(){
+     List<LogEntry> read(){
         List<LogEntry> entries = new ArrayList<>();
         SegmentedJournalReader<Object> r = j.openReader(0);
         while(r.hasNext()) {
